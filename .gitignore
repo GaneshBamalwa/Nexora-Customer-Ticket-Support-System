@@ -1,0 +1,14 @@
+# Server
+server/venv/
+server/__pycache__/
+server/*.db
+server/.env
+
+# Client
+client/node_modules/
+client/dist/
+
+# IDE
+.vscode/
+.idea/
+*.pyc
