@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Ticket, MessageSquare, Search, ArrowRight, Menu, X, Cpu, Zap, Shield, Star } from "lucide-react";
+import { Ticket, MessageSquare, Search, ArrowRight, Menu, X, Cpu, Zap, Shield, Star, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
 import { raiseTicket, searchHistory, rateTicket, followUp } from "@/api";
@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"new" | "history">("new");
+  const [activeTab, setActiveTab] = useState<"new" | "history">(() => (sessionStorage.getItem("homeActiveTab") as "new" | "history") || "new");
   const [scrollY, setScrollY] = useState(0);
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,9 +21,23 @@ export default function Home() {
     priority: "Medium",
     description: "",
   });
-  const [trackingEmail, setTrackingEmail] = useState("");
-  const [ticketHistory, setTicketHistory] = useState<any[]>([]);
-  const [customerName, setCustomerName] = useState("");
+  const [trackingEmail, setTrackingEmail] = useState(() => sessionStorage.getItem("trackingEmail") || "");
+  const [trackingStatus, setTrackingStatus] = useState(() => sessionStorage.getItem("trackingStatus") || "All");
+  const [trackingPriority, setTrackingPriority] = useState(() => sessionStorage.getItem("trackingPriority") || "All");
+  const [ticketHistory, setTicketHistory] = useState<any[]>(() => {
+    const saved = sessionStorage.getItem("ticketHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [customerName, setCustomerName] = useState(() => sessionStorage.getItem("customerName") || "");
+
+  useEffect(() => {
+    sessionStorage.setItem("trackingEmail", trackingEmail);
+    sessionStorage.setItem("trackingStatus", trackingStatus);
+    sessionStorage.setItem("trackingPriority", trackingPriority);
+    sessionStorage.setItem("ticketHistory", JSON.stringify(ticketHistory));
+    sessionStorage.setItem("customerName", customerName);
+    sessionStorage.setItem("homeActiveTab", activeTab);
+  }, [trackingEmail, trackingStatus, trackingPriority, ticketHistory, customerName, activeTab]);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -53,7 +67,10 @@ export default function Home() {
     if (!trackingEmail) return;
     setIsSearching(true);
     try {
-      const data = await searchHistory({ email: trackingEmail });
+      const filters: any = { email: trackingEmail };
+      if (trackingStatus !== "All") filters.filter_status = trackingStatus;
+      if (trackingPriority !== "All") filters.filter_priority = trackingPriority;
+      const data = await searchHistory(filters);
       setTicketHistory(data.history || []);
       setCustomerName(data.customer_name || "");
       if (data.history?.length === 0) {
@@ -64,6 +81,14 @@ export default function Home() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleResetTracker = () => {
+    setTrackingEmail("");
+    setTrackingStatus("All");
+    setTrackingPriority("All");
+    setTicketHistory([]);
+    setCustomerName("");
   };
 
   const handleRate = async (ticketId: number, rating: number) => {
@@ -159,14 +184,7 @@ export default function Home() {
             <p className="text-xl text-muted-foreground leading-relaxed">
               Experience the future of customer support. Nexora's AI-powered command center transforms tickets into solutions in real-time.
             </p>
-            <div className="flex flex-wrap justify-center gap-4 pt-4">
-              <Link href="#submit" className="btn-primary flex items-center gap-2">
-                <Ticket className="w-4 h-4" /> Submit Ticket
-              </Link>
-              <Link href="/about" className="px-6 py-3 rounded-lg border border-primary/30 hover:bg-primary/10 transition-all font-semibold">
-                Learn More
-              </Link>
-            </div>
+
           </div>
         </div>
       </section>
@@ -298,10 +316,17 @@ export default function Home() {
                   <div className="w-12 h-12 rounded-xl bg-secondary/20 flex items-center justify-center border border-secondary/30">
                     <Search className="w-6 h-6 text-secondary" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h2 className="text-2xl font-bold">Track Ticket</h2>
                     <p className="text-sm text-muted-foreground">Real-time status</p>
                   </div>
+                  <button
+                    onClick={handleResetTracker}
+                    className="p-2 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors group"
+                    title="Reset Tracker"
+                  >
+                    <RefreshCw className="w-5 h-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  </button>
                 </div>
 
                 <div className="space-y-6">
@@ -316,6 +341,35 @@ export default function Home() {
                         className="bg-white/5 border-white/10 text-foreground h-12 pl-12 focus:border-primary/50"
                       />
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <Select value={trackingStatus} onValueChange={setTrackingStatus}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-foreground h-12 text-xs">
+                          <SelectValue placeholder="Filter Status" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#020818] border-white/10">
+                          <SelectItem value="All">All Statuses</SelectItem>
+                          <SelectItem value="Open">Open</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Resolved">Resolved</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1">
+                      <Select value={trackingPriority} onValueChange={setTrackingPriority}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-foreground h-12 text-xs">
+                          <SelectValue placeholder="Filter Priority" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#020818] border-white/10">
+                          <SelectItem value="All">All Priorities</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Medium">Medium</SelectItem>
+                          <SelectItem value="Low">Low</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 

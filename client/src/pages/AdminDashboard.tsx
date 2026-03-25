@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Ticket, Users, BarChart3, LogOut, Menu, X, Trash2,
   AlertCircle, CheckCircle, Clock, Star, Plus, PieChart as PieIcon, LineChart as LineIcon,
-  LayoutDashboard, ShieldCheck, MessageSquare
+  LayoutDashboard, ShieldCheck, MessageSquare, Eye, EyeOff, Search
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -23,6 +23,10 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("overview"); 
   const [loading, setLoading] = useState(true);
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterPriority, setFilterPriority] = useState("All");
 
   // Data
   const [reportStats, setReportStats] = useState<any>({ total: 0, resolved: 0, pending: 0, avg_rating: 0 });
@@ -36,6 +40,8 @@ export default function AdminDashboard() {
   // Add agent form
   const [showAddForm, setShowAddForm] = useState(false);
   const [newAgent, setNewAgent] = useState({ name: "", email: "", role: "Agent" });
+  const [tempPassword, setTempPassword] = useState("");
+  const [showTempPw, setShowTempPw] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -78,9 +84,10 @@ export default function AdminDashboard() {
 
   const handleAddAgent = async () => {
     try {
-      await addAgent(newAgent);
+      await addAgent({ ...newAgent, ...(tempPassword ? { temp_password: tempPassword } : {}) });
       toast.success(`Added ${newAgent.name}`);
       setNewAgent({ name: "", email: "", role: "Agent" });
+      setTempPassword("");
       setShowAddForm(false);
       fetchData();
     } catch (err: any) {
@@ -108,6 +115,16 @@ export default function AdminDashboard() {
       toast.error(err.message);
     }
   };
+
+  const filteredTickets = tickets.filter(t => {
+    if (filterStatus !== "All" && t.Status !== filterStatus) return false;
+    if (filterPriority !== "All" && t.Priority !== filterPriority) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return String(t.Ticket_ID).includes(q) || (t.Subject || "").toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   const COLORS = ['#00E5FF', '#BD00FF', '#00FFA3', '#FF005C'];
 
@@ -180,6 +197,40 @@ export default function AdminDashboard() {
                 <p className="text-sm text-muted-foreground">Command and control hub for incoming grid requests.</p>
               </div>
 
+              <div className="flex gap-4 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search registry subject..."
+                    value={searchQuery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    className="pl-10 bg-white/5 border-white/10"
+                  />
+                </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[150px] bg-white/5 border-white/10 text-xs text-foreground">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#020818] border-white/10">
+                    <SelectItem value="All">All Status</SelectItem>
+                    <SelectItem value="Open">Open</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                  <SelectTrigger className="w-[150px] bg-white/5 border-white/10 text-xs text-foreground">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#020818] border-white/10">
+                    <SelectItem value="All">All Priority</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="Low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="glass-card-enhanced overflow-hidden border-border/10">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -193,7 +244,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/10">
-                      {tickets.map((ticket: any) => (
+                      {filteredTickets.map((ticket: any) => (
                         <tr key={ticket.Ticket_ID} className="hover:bg-primary/5 transition-all group">
                           <td className="px-6 py-4">
                             <span className="text-xs font-mono font-bold text-primary">#{String(ticket.Ticket_ID).padStart(4, '0')}</span>
@@ -315,7 +366,7 @@ export default function AdminDashboard() {
             {/* 3. OPERATIONAL INTEL (ANALYTICS) */}
             <TabsContent value="analytics" className="materialize outline-none space-y-8">
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="glass-card p-6 border-primary/20">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Grid Throughput</p>
                     <p className="text-3xl font-black text-primary">{reportStats.total || 0}</p>
@@ -331,6 +382,12 @@ export default function AdminDashboard() {
                   <div className="glass-card p-6 border-yellow-500/20">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Satisfaction Avg</p>
                     <p className="text-3xl font-black text-yellow-400">{reportStats.avg_rating || "N/A"}</p>
+                  </div>
+                  <div className="glass-card p-6 border-blue-500/20">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Avg Resolution</p>
+                    <p className="text-3xl font-black text-blue-400">
+                      {reportStats.avg_resolution_hours !== undefined ? `${reportStats.avg_resolution_hours}h` : "N/A"}
+                    </p>
                   </div>
               </div>
 
@@ -458,6 +515,33 @@ export default function AdminDashboard() {
                     <Input value={newAgent.name} onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })} className="bg-white/5" placeholder="Agent Name" />
                     <Input value={newAgent.email} onChange={(e) => setNewAgent({ ...newAgent, email: e.target.value })} className="bg-white/5" placeholder="Identifier Email" />
                   </div>
+
+                  {/* Temporary Password */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                      Temporary Password <span className="text-primary">(agent must set a permanent one on first login)</span>
+                    </label>
+                    <div className="relative">
+                      <Input
+                        type={showTempPw ? "text" : "password"}
+                        value={tempPassword}
+                        onChange={(e) => setTempPassword(e.target.value)}
+                        className="bg-white/5 pr-10"
+                        placeholder="Min 6 characters"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowTempPw(!showTempPw)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showTempPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      The agent will log in with this password and be immediately redirected to set a permanent one.
+                    </p>
+                  </div>
+
                   <div className="flex gap-4">
                     <Select value={newAgent.role} onValueChange={(v) => setNewAgent({ ...newAgent, role: v })}>
                          <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
@@ -466,7 +550,9 @@ export default function AdminDashboard() {
                            <SelectItem value="Administrator">Lead Overseer</SelectItem>
                          </SelectContent>
                     </Select>
-                    <button onClick={handleAddAgent} className="btn-primary px-8">ACTIVATE UNIT</button>
+                    <button onClick={handleAddAgent} className="btn-primary px-8">
+                      {newAgent.name.trim() ? `ADD ${newAgent.name.trim().toUpperCase()}` : "ADD AGENT / ADMIN"}
+                    </button>
                   </div>
                 </div>
               )}

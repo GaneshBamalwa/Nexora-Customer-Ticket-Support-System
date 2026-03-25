@@ -168,6 +168,7 @@ export async function addAgent(data: {
   name: string;
   email: string;
   role: string;
+  temp_password?: string;
 }) {
   return request("/admin/agents", {
     method: "POST",

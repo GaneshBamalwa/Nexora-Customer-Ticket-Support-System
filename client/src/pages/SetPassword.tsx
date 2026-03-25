@@ -90,9 +90,9 @@ export default function SetPassword() {
                   <ShieldCheck className="w-6 h-6 text-primary" />
                 </div>
               </div>
-              <h1 className="text-3xl font-bold">Set Password</h1>
+              <h1 className="text-3xl font-bold">Set Your Password</h1>
               <p className="text-muted-foreground text-sm">
-                Create a secure password for your account
+                You logged in with a temporary password. Create your permanent password below.
               </p>
             </div>
 

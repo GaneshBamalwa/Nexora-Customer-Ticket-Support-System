@@ -180,12 +180,16 @@ export default function About() {
               {
                 name: "Rudransh Kadiveti",
                 role: "Co-developer",
-                bio: "Meh.",
+                bio: "Backend designer and SQL expert",
+                linkedin: "https://www.linkedin.com/in/rudransh-kadiveti-2b3b96292",
+                github: "https://github.com/RudranshKadiveti",
               },
               {
-                name: "Marcus Johnson",
+                name: "Manohar Adimalla",
                 role: "Backend Systems Lead",
                 bio: "Database optimization and API design. PostgreSQL & microservices expert.",
+                linkedin: "https://in.linkedin.com/in/naga-manohar-adimalla-a7773b326",
+                github: "https://github.com/Manohar9111",
               },
             ].map((developer, idx) => (
               <div
@@ -222,76 +226,11 @@ export default function About() {
         </div>
       </section>
 
-      {/* Section 3: AI Interaction (Chat Simulation) */}
-      <section className="py-40 bg-white/[0.02]">
-        <div className="container">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-            <div className="space-y-8">
-              <h2 className="text-5xl font-bold tracking-tight leading-tight">
-                Intelligent <span className="text-primary">Interaction</span>
-              </h2>
-              <p className="text-xl text-muted-foreground leading-relaxed">
-                Our AI doesn't just route tickets; it understands context, suggests solutions, and learns from every interaction to provide human-like assistance at scale.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <button className="btn-primary flex items-center gap-2 group">
-                  Explore AI <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="glass-card p-6 max-w-md mx-auto space-y-4 shadow-2xl relative overflow-hidden">
-
-                {/* Chat Messages */}
-                {[
-                  { role: "user", text: "How do I reset my API key?" },
-                  { role: "ai", text: "I can help with that. You can find the reset option in your dashboard under Settings > API." },
-                  { role: "ai-suggestion", text: "Would you like me to send a direct link?" }
-                ].map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`p-4 rounded-lg text-sm transition-all duration-500 ${i <= activeMessage ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-                      } ${msg.role === 'user' ? "bg-white/5 ml-8" : "bg-primary/10 mr-8 border border-primary/20"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {msg.role === 'user' ? <Users className="w-3 h-3 text-muted-foreground" /> : <Cpu className="w-3 h-3 text-primary" />}
-                      <span className="text-[10px] font-bold uppercase tracking-tighter opacity-50">
-                        {msg.role === 'user' ? "Customer" : "Nexora AI"}
-                      </span>
-                    </div>
-                    {msg.text}
-                    {msg.role === 'ai-suggestion' && (
-                      <button className="mt-3 w-full py-2 rounded bg-primary text-primary-foreground font-bold text-xs hover:scale-[1.02] active:scale-95 transition-all">
-                        USE REPLY
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <div className="pt-4 flex items-center gap-2">
-                  <div className="flex-1 h-10 bg-white/5 rounded-full border border-white/10 px-4 flex items-center text-xs text-muted-foreground">
-                    Type a message...
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-                    <ArrowRight className="w-4 h-4 text-primary-foreground" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Glow Decoration */}
-              <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
-              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-secondary/10 rounded-full blur-3xl" />
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Section 4: SLA / Alerts (Urgency Visualization) */}
-      <section className="py-40 relative overflow-hidden">
+      <section className="py-20 relative overflow-hidden">
         <div className="container">
-          <div className="max-w-3xl mx-auto text-center mb-20">
+          <div className="max-w-3xl mx-auto text-center mb-16">
             <h2 className="text-4xl font-bold mb-6">Uncompromising Reliability</h2>
             <p className="text-muted-foreground">Real-time SLA monitoring ensures no ticket is ever left behind.</p>
           </div>
@@ -341,35 +280,65 @@ export default function About() {
         </div>
       </section>
 
-      {/* Section 5: Analytics (Animated Stats) */}
-      <section className="py-40 bg-gradient-to-b from-transparent to-primary/5">
+      {/* Section 5: Analytics & AI */}
+      <section className="pt-20 pb-40 bg-gradient-to-b from-transparent to-primary/5">
         <div className="container">
-          <div className="flex flex-col lg:flex-row gap-20 items-center">
-            <div className="flex-1 space-y-12">
-              <div className="space-y-4">
-                <h2 className="text-5xl font-bold tracking-tight">Precision <span className="text-primary">Analytics</span></h2>
-                <p className="text-xl text-muted-foreground leading-relaxed">
-                  Gain deep insights into team performance, customer satisfaction, and operational efficiency with our live-updating data engine.
-                </p>
-              </div>
+          <div className="text-center mb-16 space-y-4 max-w-3xl mx-auto">
+            <h2 className="text-5xl font-bold tracking-tight">Precision <span className="text-primary">Analytics & AI</span></h2>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              Gain deep insights into team performance and experience our contextual AI that learns from every interaction.
+            </p>
+          </div>
 
-              <div className="grid grid-cols-2 gap-8">
+          <div className="flex flex-col lg:flex-row gap-12 items-stretch justify-center">
+            
+            {/* Chat Box */}
+            <div className="relative w-full lg:w-1/2 max-w-lg">
+              <div className="glass-card p-6 h-full flex flex-col justify-end space-y-4 shadow-2xl relative overflow-hidden">
+                {/* Chat Messages */}
                 {[
-                  { label: "Efficiency", value: "98", suffix: "%" },
-                  { label: "Resolution", value: "1.2", suffix: "h" }
-                ].map((stat, i) => (
-                  <div key={i} className="space-y-2">
-                    <p className="text-sm font-bold text-primary uppercase tracking-widest">{stat.label}</p>
-                    <div className="text-5xl font-extrabold flex items-baseline">
-                      <span>{stat.value}</span>
-                      <span className="text-xl text-muted-foreground ml-1">{stat.suffix}</span>
+                  { role: "user", text: "How do I reset my API key?" },
+                  { role: "ai", text: "I can help with that. You can find the reset option in your dashboard under Settings > API." },
+                  { role: "ai-suggestion", text: "Would you like me to send a direct link?" }
+                ].map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`p-4 rounded-lg text-sm transition-all duration-500 ${i <= activeMessage ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+                      } ${msg.role === 'user' ? "bg-white/5 ml-8" : "bg-primary/10 mr-8 border border-primary/20"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      {msg.role === 'user' ? <Users className="w-3 h-3 text-muted-foreground" /> : <Cpu className="w-3 h-3 text-primary" />}
+                      <span className="text-[10px] font-bold uppercase tracking-tighter opacity-50">
+                        {msg.role === 'user' ? "Customer" : "Nexora AI"}
+                      </span>
                     </div>
+                    {msg.text}
+                    {msg.role === 'ai-suggestion' && (
+                      <button className="mt-3 w-full py-2 rounded bg-primary text-primary-foreground font-bold text-xs hover:scale-[1.02] active:scale-95 transition-all">
+                        USE REPLY
+                      </button>
+                    )}
                   </div>
                 ))}
+
+                <div className="pt-4 flex items-center gap-2">
+                  <div className="flex-1 h-10 bg-white/5 rounded-full border border-white/10 px-4 flex items-center text-xs text-muted-foreground">
+                    Type a message...
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center relative z-10">
+                    <ArrowRight className="w-4 h-4 text-primary-foreground" />
+                  </div>
+                </div>
+
+                {/* Glow Decoration */}
+                <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
               </div>
             </div>
 
-            <div className="w-full lg:w-1/2 glass-card p-8 space-y-8">
+            {/* System Performance */}
+            <div className="w-full lg:w-1/2 max-w-lg glass-card p-8 space-y-8">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold">System Performance</h3>
                 <BarChart3 className="w-5 h-5 text-primary" />

@@ -18,6 +18,8 @@ import os
 import re
 from datetime import datetime, timedelta
 from typing import Optional
+import asyncio
+import logging
 
 from dotenv import load_dotenv
 
@@ -62,6 +64,52 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         status_code=429,
         content={"detail": "Too many requests. Please slow down."},
     )
+
+async def background_auto_assign():
+    while True:
+        try:
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            execute_query(cursor, "SELECT Ticket_ID, Created_Date FROM Tickets WHERE Agent_ID IS NULL AND Status != 'Resolved'")
+            unassigned = [process_row(r) for r in fetch_all(cursor)]
+            now = datetime.utcnow()
+            to_assign = []
+            for t in unassigned:
+                try:
+                    cd = datetime.fromisoformat(t["Created_Date"].split(".")[0])
+                    if (now - cd).total_seconds() > 24 * 3600:
+                        to_assign.append(t["Ticket_ID"])
+                except Exception:
+                    pass
+            
+            if to_assign:
+                execute_query(cursor,
+                    "SELECT a.Agent_ID, COUNT(t.Ticket_ID) as active_count "
+                    "FROM Support_Agents a "
+                    "LEFT JOIN Tickets t ON a.Agent_ID = t.Agent_ID AND t.Status != 'Resolved' "
+                    "WHERE a.Role = 'Agent' "
+                    "GROUP BY a.Agent_ID")
+                agents = fetch_all(cursor)
+                if agents:
+                    import random
+                    min_count = min(a[1] for a in agents)
+                    candidates = [a[0] for a in agents if a[1] == min_count]
+                    for tid in to_assign:
+                        chosen = random.choice(candidates)
+                        execute_query(cursor,
+                            f"UPDATE Tickets SET Agent_ID = {PH}, Assigned_At = CURRENT_TIMESTAMP "
+                            f"WHERE Ticket_ID = {PH}",
+                            (chosen, tid))
+                    if not IS_MYSQL:
+                        conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"Auto-assign task error: {e}")
+        await asyncio.sleep(60 * 5)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(background_auto_assign())
 
 
 # ─── MIDDLEWARE ──────────────────────────────────────────────────────────────
@@ -173,6 +221,7 @@ class AddAgentRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
     role: str = Field(..., pattern=r"^(Agent|Administrator)$")
+    temp_password: Optional[str] = Field(None, min_length=6, max_length=128)
 
 
 class AssignTicketRequest(BaseModel):
@@ -389,18 +438,21 @@ async def login(request: Request, body: LoginRequest):
             token = create_token(user)
             return {
                 "token": token,
-                "user": {k: v for k, v in user.items() if k != "Password"},
+                "user": {k: v for k, v in user.items() if k not in ("Password",)},
                 "needs_password_setup": True,
             }
 
         if not _verify_pw(body.password, user["Password"]):
             raise HTTPException(401, "Invalid credentials.")
 
+        # Temp password → force the agent to set a real one
+        is_temp = bool(user.get("Is_Temp_Password"))
+
         token = create_token(user)
         return {
             "token": token,
-            "user": {k: v for k, v in user.items() if k != "Password"},
-            "needs_password_setup": False,
+            "user": {k: v for k, v in user.items() if k not in ("Password",)},
+            "needs_password_setup": is_temp,
         }
     finally:
         conn.close()
@@ -470,6 +522,24 @@ async def dashboard(request: Request,
         )
         stats = fetch_one(cursor) or {}
 
+        execute_query(cursor,
+            "SELECT Created_Date, Resolved_At FROM Tickets WHERE Status='Resolved' "
+            "AND Resolved_At IS NOT NULL AND Created_Date IS NOT NULL"
+            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["role"] != "Administrator" else ""),
+            (user["agent_id"],) if user["role"] != "Administrator" else ()
+        )
+        resolved_tickets = [process_row(r) for r in fetch_all(cursor)]
+        total_hours, valid_tkts = 0, 0
+        for rt in resolved_tickets:
+            try:
+                cd = datetime.fromisoformat(rt["Created_Date"].split(".")[0])
+                ra = datetime.fromisoformat(rt["Resolved_At"].split(".")[0])
+                total_hours += (ra - cd).total_seconds() / 3600.0
+                valid_tkts += 1
+            except Exception:
+                pass
+        avg_res = round(total_hours / valid_tkts, 1) if valid_tkts > 0 else 0.0
+
         return {
             "tickets": tickets,
             "agents": agents,
@@ -477,6 +547,7 @@ async def dashboard(request: Request,
                 "total": stats.get("total", 0),
                 "open": stats.get("open_count", 0),
                 "resolved": stats.get("resolved", 0),
+                "avg_resolution_hours": avg_res,
             },
             "user": user,
         }
@@ -536,6 +607,21 @@ async def admin_report(request: Request):
         }
 
         execute_query(cursor,
+            "SELECT Created_Date, Resolved_At FROM Tickets WHERE Status='Resolved' "
+            "AND Resolved_At IS NOT NULL AND Created_Date IS NOT NULL")
+        resolved_tickets = [process_row(r) for r in fetch_all(cursor)]
+        total_hours, valid_tkts = 0, 0
+        for rt in resolved_tickets:
+            try:
+                cd = datetime.fromisoformat(rt["Created_Date"].split(".")[0])
+                ra = datetime.fromisoformat(rt["Resolved_At"].split(".")[0])
+                total_hours += (ra - cd).total_seconds() / 3600.0
+                valid_tkts += 1
+            except Exception:
+                pass
+        stats["avg_resolution_hours"] = round(total_hours / valid_tkts, 1) if valid_tkts > 0 else 0.0
+
+        execute_query(cursor,
             "SELECT a.Name, COUNT(t.Ticket_ID) as assigned, "
             "SUM(CASE WHEN t.Status = 'Resolved' THEN 1 ELSE 0 END) as solved, "
             "ROUND(AVG(CASE WHEN t.Rating IS NOT NULL THEN t.Rating END), 1) as avg_rating "
@@ -587,10 +673,20 @@ async def add_agent(request: Request, body: AddAgentRequest):
         if fetch_one(cursor):
             raise HTTPException(400, "An agent with this email already exists.")
 
-        execute_query(cursor,
-            f"INSERT INTO Support_Agents (Name, Email_ID, Role) "
-            f"VALUES ({PH}, {PH}, {PH})",
-            (body.name, body.email, body.role))
+        if body.temp_password:
+            hashed_temp = bcrypt.hashpw(
+                body.temp_password.encode(), bcrypt.gensalt()
+            ).decode()
+            execute_query(cursor,
+                f"INSERT INTO Support_Agents (Name, Email_ID, Role, Password, Is_Temp_Password) "
+                f"VALUES ({PH}, {PH}, {PH}, {PH}, {PH})",
+                (body.name, body.email, body.role, hashed_temp, True))
+        else:
+            execute_query(cursor,
+                f"INSERT INTO Support_Agents (Name, Email_ID, Role) "
+                f"VALUES ({PH}, {PH}, {PH})",
+                (body.name, body.email, body.role))
+
         if not IS_MYSQL:
             conn.commit()
         return {"message": f"Added {body.name}."}
@@ -734,9 +830,9 @@ async def set_password(request: Request, body: SetPasswordRequest):
     cursor = conn.cursor()
     try:
         execute_query(cursor,
-            f"UPDATE Support_Agents SET Password = {PH} "
+            f"UPDATE Support_Agents SET Password = {PH}, Is_Temp_Password = {PH} "
             f"WHERE Agent_ID = {PH}",
-            (hashed, user["agent_id"]))
+            (hashed, False, user["agent_id"]))
 
         if user["role"] == "Agent":
             execute_query(cursor,
@@ -777,7 +873,11 @@ async def request_password_change(request: Request):
 @app.post("/api/ai/suggest")
 @limiter.limit(RATE_LIMIT_API)
 async def ai_suggest(request: Request):
+    import urllib.request
+    import urllib.error
+    import json
     import random
+    
     responses = [
         "Hello! I understand you're experiencing an issue. Let me help you resolve this right away.",
         "Hi there! Thank you for reaching out. I'm currently reviewing your request and will provide an update shortly.",
@@ -787,7 +887,34 @@ async def ai_suggest(request: Request):
         "Thank you for contacting support! To help me investigate faster, could you share a screenshot of the error?",
         "Hello! I am pulling up your account details now to see what might be causing this issue."
     ]
-    return {"suggestion": random.choice(responses)}
+    
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    if not groq_api_key:
+        return {"suggestion": random.choice(responses)}
+        
+    try:
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {groq_api_key}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "model": "llama3-8b-8192",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful customer support agent for Nexora. Give a single crisp short professional response that the agent can send to the customer."},
+                    {"role": "user", "content": "Help me formulate a response to the customer. Maintain a professional, empathetic tone."}
+                ]
+            }).encode("utf-8")
+        )
+        
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            suggestion = result["choices"][0]["message"]["content"].strip()
+            return {"suggestion": suggestion}
+    except Exception as e:
+        return {"suggestion": f"I'm here to help, but having trouble connecting to my AI brain. (Error: {str(e)})"}
 
 
 # ─── ENTRYPOINT ──────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Ticket, MessageSquare, LogOut, Menu, X, Clock,
   AlertCircle, CheckCircle, Search, ChevronRight, LayoutDashboard,
@@ -16,6 +17,8 @@ export default function AgentDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterPriority, setFilterPriority] = useState("All");
   const [hideResolved, setHideResolved] = useState(false);
   
   const [tickets, setTickets] = useState<any[]>([]);
@@ -95,6 +98,13 @@ export default function AgentDashboard() {
       } else {
         base = base.filter(t => (t.Agent_ID === currentAgentId || !t.Agent_ID) && t.Status !== "Resolved");
       }
+    }
+
+    if (filterStatus !== "All") {
+      base = base.filter(t => t.Status === filterStatus);
+    }
+    if (filterPriority !== "All") {
+      base = base.filter(t => t.Priority === filterPriority);
     }
 
     return base.filter((ticket) => {
@@ -247,8 +257,8 @@ export default function AgentDashboard() {
           ) : (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between">
-                <div className="flex-1 max-w-xl">
-                  <div className="relative">
+                <div className="flex-1 max-w-2xl flex gap-2">
+                  <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       placeholder="Search registry subject..."
@@ -257,6 +267,28 @@ export default function AgentDashboard() {
                       className="pl-10 bg-white/5 border-white/10"
                     />
                   </div>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="w-[130px] bg-white/5 border-white/10 text-xs">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#020818] border-white/10">
+                      <SelectItem value="All">All Status</SelectItem>
+                      <SelectItem value="Open">Open</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterPriority} onValueChange={setFilterPriority}>
+                    <SelectTrigger className="w-[130px] bg-white/5 border-white/10 text-xs">
+                      <SelectValue placeholder="Priority" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#020818] border-white/10">
+                      <SelectItem value="All">All Priority</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 {activeSection === "my-tickets" && (
                   <button

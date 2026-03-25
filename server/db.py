@@ -108,8 +108,16 @@ def init_db():
             "CREATE TABLE IF NOT EXISTS Support_Agents ("
             "Agent_ID INT AUTO_INCREMENT PRIMARY KEY, "
             "Name VARCHAR(255), Email_ID VARCHAR(255) UNIQUE, "
-            "Role VARCHAR(50), Password VARCHAR(255) NULL)"
+            "Role VARCHAR(50), Password VARCHAR(255) NULL, "
+            "Is_Temp_Password BOOLEAN DEFAULT FALSE)"
         )
+        # Migration: add column if it doesn't exist yet
+        try:
+            cursor.execute(
+                "ALTER TABLE Support_Agents ADD COLUMN Is_Temp_Password BOOLEAN DEFAULT FALSE"
+            )
+        except Exception:
+            pass  # Column already exists
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS Tickets ("
             "Ticket_ID INT AUTO_INCREMENT PRIMARY KEY, "
@@ -143,7 +151,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS Support_Agents (
                 Agent_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 Name TEXT, Email_ID TEXT UNIQUE,
-                Role TEXT, Password TEXT NULL
+                Role TEXT, Password TEXT NULL,
+                Is_Temp_Password INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS Tickets (
                 Ticket_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -167,6 +176,14 @@ def init_db():
                 Requested_At DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        # Migration: add column if it doesn't exist yet (SQLite)
+        try:
+            cursor.execute(
+                "ALTER TABLE Support_Agents ADD COLUMN Is_Temp_Password INTEGER DEFAULT 0"
+            )
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
 
     # Seed default agents with bcrypt passwords
     agents = [
