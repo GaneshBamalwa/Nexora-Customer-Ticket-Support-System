@@ -12,3 +12,4 @@ client/dist/
 .vscode/
 .idea/
 *.pyc
+client/.vite/
