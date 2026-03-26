@@ -784,6 +784,106 @@ async def handle_pw_request(request: Request, req_id: int, action: str):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  SQL QUERY CONSOLE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SqlQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+
+@app.get("/api/sql/metadata")
+@limiter.limit(RATE_LIMIT_API)
+async def get_sql_metadata(request: Request):
+    """Returns all table schemas and 5 sample rows for the SQL Console."""
+    user = get_current_user(request)
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        # Get all tables
+        if IS_MYSQL:
+            execute_query(cursor, "SHOW TABLES")
+            tables = [list(r.values())[0] for r in fetch_all(cursor)]
+        else:
+            execute_query(cursor, "SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [r["name"] for r in fetch_all(cursor)]
+            
+        metadata = {}
+        for t in tables:
+            # columns
+            if IS_MYSQL:
+                execute_query(cursor, f"DESCRIBE {t}")
+                cols = [c["Field"] for c in fetch_all(cursor)]
+            else:
+                execute_query(cursor, f"PRAGMA table_info({t})")
+                cols = [c["name"] for c in fetch_all(cursor)]
+                
+            # sample rows
+            execute_query(cursor, f"SELECT * FROM {t} LIMIT 5")
+            raw_rows = fetch_all(cursor)
+            rows = []
+            for r in raw_rows:
+                processed = process_row(r)
+                rows.append(processed)
+                
+            metadata[t] = {
+                "columns": cols,
+                "rows": rows
+            }
+        return metadata
+    finally:
+        conn.close()
+
+@app.post("/api/sql/query")
+@limiter.limit(RATE_LIMIT_API)
+async def run_sql_query(request: Request, body: SqlQueryRequest):
+    """Execute raw SQL query with role-based restrictions."""
+    user = get_current_user(request)
+    role = user.get("role", "Agent")
+    
+    query = body.query.strip()
+    upper_q = query.upper()
+    
+    is_delete = upper_q.startswith("DELETE") or " DELETE " in upper_q
+    is_drop = upper_q.startswith("DROP") or " DROP " in upper_q
+    
+    if role != "Administrator" and (is_delete or is_drop):
+        action = "DELETE" if is_delete else "DROP"
+        raise HTTPException(403, f"Permission Denied: {action} not allowed for Agent")
+        
+    # Safety limit
+    if upper_q.startswith("SELECT") and "LIMIT" not in upper_q:
+        query += " LIMIT 100"
+        
+    logging.info(f"User {user.get('email')} ({role}) executing SQL: {query}")
+        
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        execute_query(cursor, query)
+        
+        if cursor.description:
+            cols = [desc[0] for desc in cursor.description]
+            raw_rows = fetch_all(cursor)
+            rows = [process_row(r) for r in raw_rows]
+            return {
+                "columns": cols,
+                "rows": rows,
+                "message": f"Success: {len(rows)} rows returned."
+            }
+        else:
+            if not IS_MYSQL:
+                conn.commit()
+            return {
+                "columns": [],
+                "rows": [],
+                "message": f"Success: {cursor.rowcount} rows affected."
+            }
+    except Exception as e:
+        raise HTTPException(400, f"Query Error: {str(e)}")
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  PASSWORD MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════════════════
 

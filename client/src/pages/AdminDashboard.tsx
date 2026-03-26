@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Ticket, Users, BarChart3, LogOut, Menu, X, Trash2,
   AlertCircle, CheckCircle, Clock, Star, Plus, PieChart as PieIcon, LineChart as LineIcon,
-  LayoutDashboard, ShieldCheck, MessageSquare, Eye, EyeOff, Search
+  LayoutDashboard, ShieldCheck, MessageSquare, Eye, EyeOff, Search, Database, Download
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -126,6 +126,26 @@ export default function AdminDashboard() {
     return true;
   });
 
+  const exportCSV = () => {
+    let csvStr = "data:text/csv;charset=utf-8,";
+    csvStr += "Agent Name,Assigned Tickets,Solved,Average Rating\n";
+    performance.forEach(p => {
+      csvStr += `"${p.Name}",${p.assigned},${p.solved},${p.avg_rating || 0}\n`;
+    });
+    const encodedUri = encodeURI(csvStr);
+    const link = document.createElement("a");
+    link.href = encodedUri;
+    link.download = "Agent_Performance_Report.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV Downloaded");
+  };
+
+  const exportPDF = () => {
+    window.print();
+  };
+
   const COLORS = ['#00E5FF', '#BD00FF', '#00FFA3', '#FF005C'];
 
   const getStatusBadge = (status: string) => {
@@ -183,6 +203,14 @@ export default function AdminDashboard() {
             ))}
           </nav>
           
+          <div className="p-4 border-t border-white/10 mt-4">
+            <Link href="/sql-console">
+              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-white hover:bg-[#00e5ff]/10 border border-white/5 hover:border-[#00e5ff]/30 transition-all bg-black/20 shadow-lg">
+                <Database className="w-4 h-4 text-[#00e5ff]" />
+                <span className="font-bold text-[11px] uppercase tracking-widest leading-none text-[#00e5ff]">SQL Console</span>
+              </button>
+            </Link>
+          </div>
         </aside>
 
         {/* Main Content */}
@@ -365,6 +393,20 @@ export default function AdminDashboard() {
 
             {/* 3. OPERATIONAL INTEL (ANALYTICS) */}
             <TabsContent value="analytics" className="materialize outline-none space-y-8">
+              <div className="flex justify-between items-center mb-6">
+                 <div>
+                   <h2 className="text-2xl font-bold text-foreground">Operational Intel</h2>
+                   <p className="text-sm text-muted-foreground">System-wide analytics and agent performance metrics.</p>
+                 </div>
+                 <div className="flex gap-3">
+                   <button onClick={exportPDF} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-all print:hidden">
+                     <Download className="w-4 h-4" /> PDF Report
+                   </button>
+                   <button onClick={exportCSV} className="flex items-center gap-2 px-4 py-2 bg-[#00e5ff]/10 border border-[#00e5ff]/30 hover:bg-[#00e5ff]/20 rounded-lg text-xs font-bold text-[#00e5ff] transition-all print:hidden">
+                     <Database className="w-4 h-4" /> Export CSV
+                   </button>
+                 </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="glass-card p-6 border-primary/20">

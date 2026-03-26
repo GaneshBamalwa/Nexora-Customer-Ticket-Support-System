@@ -214,4 +214,17 @@ export async function aiSuggest() {
   return request("/ai/suggest", { method: "POST" });
 }
 
+// ─── SQL CONSOLE ────────────────────────────────────────────────────────────
+
+export async function getSqlMetadata() {
+  return request("/sql/metadata");
+}
+
+export async function runSqlQuery(query: string) {
+  return request("/sql/query", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
+}
+
 export { getToken, setToken, clearToken, getStoredUser, setStoredUser };

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Ticket, MessageSquare, LogOut, Menu, X, Clock,
   AlertCircle, CheckCircle, Search, ChevronRight, LayoutDashboard,
-  Filter, Star, KeyRound
+  Filter, Star, KeyRound, Database
 } from "lucide-react";
 import { getDashboard, resolveTicket, assignTicket, logout, isAuthenticated, getCurrentUser, requestPasswordChange } from "@/api";
 import { toast } from "sonner";
@@ -201,15 +201,24 @@ export default function AgentDashboard() {
               disabled={pwRequestLoading}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20 transition-all disabled:opacity-50"
             >
-              {pwRequestLoading
-                ? <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                : <KeyRound className="w-4 h-4" />}
-              <span className="font-bold text-xs uppercase tracking-widest">Change Password</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* Main Content */}
+                {pwRequestLoading
+                  ? <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  : <KeyRound className="w-4 h-4" />}
+                <span className="font-bold text-xs uppercase tracking-widest">Change Password</span>
+              </button>
+            </div>
+            
+            <div className="p-4 border-t border-white/10 mt-auto">
+              <Link href="/sql-console">
+                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-white hover:bg-[#00e5ff]/10 border border-white/5 hover:border-[#00e5ff]/30 transition-all bg-black/20 shadow-lg">
+                  <Database className="w-4 h-4 text-[#00e5ff]" />
+                  <span className="font-bold text-[11px] uppercase tracking-widest leading-none text-[#00e5ff]">SQL Console</span>
+                </button>
+              </Link>
+            </div>
+          </aside>
+  
+          {/* Main Content */}
         <main className="flex-1 p-6 md:p-10">
           {activeSection === "dashboard" ? (
              <div className="space-y-8">

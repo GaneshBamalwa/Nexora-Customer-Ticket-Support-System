@@ -12,6 +12,7 @@ import AgentDashboard from "./pages/AgentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import Conversation from "./pages/Conversation";
 import SetPassword from "./pages/SetPassword";
+import SqlConsole from "./pages/SqlConsole";
 
 function Router() {
   return (
@@ -23,6 +24,7 @@ function Router() {
       <Route path={"/admin-dashboard"} component={AdminDashboard} />
       <Route path={"/conversation/:ticketId"} component={Conversation} />
       <Route path={"/set-password"} component={SetPassword} />
+      <Route path={"/sql-console"} component={SqlConsole} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
