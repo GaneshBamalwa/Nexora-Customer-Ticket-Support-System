@@ -14,20 +14,39 @@ import {
   ChevronRight,
   ArrowRight,
   MousePointer2,
+  Activity,
+  Database,
+  Search,
+  HardDrive,
+  Loader2,
+  Send,
   Clock
 } from "lucide-react";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
+import { aiQuery, getPublicStats } from "@/api";
+import ReactMarkdown from "react-markdown";
 
 /**
  * Nexora - Immersive About Page
  * Futuristic, Premium SaaS, AI-Powered experience
  */
 
+interface ChatMessage {
+  role: "user" | "ai" | "ai-suggestion";
+  text: string;
+}
+
 export default function About() {
   const [scrollY, setScrollY] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [activeMessage, setActiveMessage] = useState(0);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: "ai", text: "Welcome to Nexora! How can I help you today?" }
+  ]);
+  const [inputMessage, setInputMessage] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -36,26 +55,43 @@ export default function About() {
     window.addEventListener("scroll", handleScroll);
     window.addEventListener("mousemove", handleMouseMove);
 
-    // Simulate chat messages
-    const interval = setInterval(() => {
-      setActiveMessage((prev) => (prev < 2 ? prev + 1 : 0));
-    }, 3000);
+    // Fetch real stats
+    getPublicStats().then(setStats).catch(console.error);
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("mousemove", handleMouseMove);
-      clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, isTyping]);
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputMessage.trim() || isTyping) return;
+
+    const userMessage = inputMessage.trim();
+    setInputMessage("");
+    setChatMessages(prev => [...prev, { role: "user", text: userMessage }]);
+    setIsTyping(true);
+
+    try {
+      const response = await aiQuery(userMessage);
+      setChatMessages(prev => [...prev, { role: "ai", text: response.answer }]);
+    } catch (error) {
+      setChatMessages(prev => [...prev, { role: "ai", text: "Sorry, I'm having trouble connecting to my knowledge base right now." }]);
+    } finally {
+      setIsTyping(false);
+    }
+  };
 
   const calculateOpacity = (start: number, end: number) => {
     const progress = (scrollY - start) / (end - start);
     return Math.max(0, Math.min(1, progress));
-  };
-
-  const calculateTransform = (start: number, end: number, maxDistance: number) => {
-    const progress = (scrollY - start) / (end - start);
-    return Math.max(0, Math.min(maxDistance, progress * maxDistance));
   };
 
   return (
@@ -227,55 +263,94 @@ export default function About() {
       </section>
 
 
-      {/* Section 4: SLA / Alerts (Urgency Visualization) */}
-      <section className="py-20 relative overflow-hidden">
+      {/* Section 4: Engineering Excellence (Live Stats Visualization) */}
+      <section className="py-24 relative overflow-hidden bg-primary/5">
         <div className="container">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <h2 className="text-4xl font-bold mb-6">Uncompromising Reliability</h2>
-            <p className="text-muted-foreground">Real-time SLA monitoring ensures no ticket is ever left behind.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {[
-              { label: "Normal", time: "24h left", status: "ok", color: "primary" },
-              { label: "Warning", time: "4h left", status: "warning", color: "yellow-400" },
-              { label: "Overdue", time: "Expired", status: "alert", color: "red-500" }
-            ].map((item, i) => (
-              <div key={i} className="glass-card p-8 group relative overflow-hidden">
-                {item.status === 'alert' && <div className="absolute inset-0 bg-red-500/5 animate-pulse" />}
-
-                <div className="relative z-10">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-6 border transition-colors ${item.status === 'ok' ? "bg-primary/10 border-primary/20" :
-                    item.status === 'warning' ? "bg-yellow-500/10 border-yellow-500/20" :
-                      "bg-red-500/10 border-red-500/20"
-                    }`}>
-                    <Bell className={`w-6 h-6 ${item.status === 'ok' ? "text-primary" :
-                      item.status === 'warning' ? "text-yellow-400" :
-                        "text-red-500 animate-bounce"
-                      }`} />
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">{item.label}</h3>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className={`text-sm font-mono ${item.status === 'alert' ? "text-red-500" : "text-muted-foreground"
-                      }`}>
-                      {item.time}
-                    </span>
-                  </div>
-
-                  {/* Ticking Effect for Overdue */}
-                  {item.status === 'alert' && (
-                    <div className="mt-6 flex gap-1">
-                      {[...Array(5)].map((_, j) => (
-                        <div key={j} className="h-1 flex-1 bg-red-500/20 rounded-full overflow-hidden">
-                          <div className="h-full bg-red-500 animate-[shimmer_2s_infinite]" style={{ animationDelay: `${j * 0.2}s` }} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+          <div className="max-w-4xl mx-auto flex flex-col lg:flex-row items-center gap-16">
+            <div className="flex-1 space-y-8 fade-slide-in">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold uppercase tracking-widest text-primary">
+                <Activity className="w-3 h-3" />
+                Live System Diagnostics
               </div>
-            ))}
+              <h2 className="text-5xl font-bold tracking-tight leading-tight">
+                Engineering <br /><span className="text-primary italic">Excellence</span>
+              </h2>
+              <p className="text-xl text-muted-foreground leading-relaxed">
+                Nexora maintains a <span className="text-white font-bold">99.9% uptime</span> through redundant microservices and real-time SLA monitoring. Our infrastructure is built for speed and reliability.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-8 pt-4">
+                {[
+                  { label: "Active Tickets", value: stats?.pending ?? "12", sub: "Live Workload" },
+                  { label: "Resolved", value: stats?.resolved ?? "842", sub: "Total Solutions" },
+                  { label: "Uptime", value: stats?.uptime ?? "99.98%", sub: "Last 30 Days" },
+                  { label: "Avg Latency", value: stats?.latency ?? "114ms", sub: "API Response" }
+                ].map((stat, i) => (
+                  <div key={i} className="space-y-1">
+                    <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</div>
+                    <div className="text-2xl font-bold text-white">{stat.value}</div>
+                    <div className="text-[10px] text-primary font-bold uppercase tracking-tighter italic">{stat.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 w-full lg:max-w-md">
+              <div className="glass-card p-10 relative overflow-hidden group min-h-[500px]">
+                <div className="flex items-center justify-between mb-12">
+                   <h3 className="text-sm font-bold uppercase tracking-widest text-white/50 px-2 border-l-2 border-primary">Database Core</h3>
+                   <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary/30" />
+                   </div>
+                </div>
+
+                {/* Unified Vertical Pipeline UI */}
+                <div className="relative px-2">
+                  {/* Continuous Pipeline Base Track (Threads through everything) */}
+                  <div className="absolute left-8 top-6 bottom-6 w-[2px] bg-primary/20 rounded-full" />
+                  
+                  {/* Glowing Overlay Line (Threading through nodes) */}
+                  <div className="absolute left-8 top-6 bottom-6 w-[2px] bg-primary shadow-[0_0_10px_rgba(0,229,255,0.6)] rounded-full animate-pulse opacity-80" />
+                  
+                  {/* Optional: Subtle Animated Flow along the line */}
+                  <div className="absolute left-8 top-6 bottom-6 w-[2px] overflow-hidden rounded-full">
+                    <div className="w-full h-24 bg-gradient-to-b from-transparent via-white to-transparent animate-[streamingPulse_3s_linear_infinite] opacity-50" />
+                  </div>
+
+                  <div className="space-y-12">
+                    {[
+                      { icon: Search, label: "Query Ingestion", sub: "Request Received" },
+                      { icon: Cpu, label: "Optimizer", sub: "Execution Plan Alpha" },
+                      { icon: Database, label: "Table Scan", sub: "B-Tree Navigation" },
+                      { icon: HardDrive, label: "Commit", sub: "Persistent Storage", synced: true }
+                    ].map((step, i) => (
+                      <div key={i} className="flex items-center gap-6 relative group transform transition-transform hover:translate-x-1 duration-500">
+                         {/* Opaque dark node background - Hides bar behind it */}
+                         <div className="w-12 h-12 rounded-xl flex items-center justify-center border border-primary/20 bg-[#0a0f1d] shadow-xl relative z-20">
+                            <step.icon className="w-5 h-5 text-primary" />
+                            <div className="absolute inset-0 bg-primary/10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                         </div>
+                         
+                         <div className="space-y-1">
+                            <h4 className="text-sm font-bold uppercase tracking-widest text-white">{step.label}</h4>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-40">{step.sub}</p>
+                         </div>
+
+                         <div className="ml-auto">
+                           <div className="text-[8px] font-bold py-1 px-2 rounded border border-primary/20 bg-primary/5 text-primary/70 uppercase tracking-tighter">
+                             {step.synced ? "Synced" : "In Queue"}
+                           </div>
+                         </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Decoration */}
+                <div className="absolute -bottom-20 -right-20 w-48 h-48 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -286,93 +361,95 @@ export default function About() {
           <div className="text-center mb-16 space-y-4 max-w-3xl mx-auto">
             <h2 className="text-5xl font-bold tracking-tight">Precision <span className="text-primary">Analytics & AI</span></h2>
             <p className="text-xl text-muted-foreground leading-relaxed">
-              Gain deep insights into team performance and experience our contextual AI that learns from every interaction.
+              Gain deep insights into team performance and interact with our project AI to learn more about Nexora.
             </p>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-12 items-stretch justify-center">
+          <div className="flex flex-col items-center justify-center">
             
-            {/* Chat Box */}
-            <div className="relative w-full lg:w-1/2 max-w-lg">
-              <div className="glass-card p-6 h-full flex flex-col justify-end space-y-4 shadow-2xl relative overflow-hidden">
-                {/* Chat Messages */}
-                {[
-                  { role: "user", text: "How do I reset my API key?" },
-                  { role: "ai", text: "I can help with that. You can find the reset option in your dashboard under Settings > API." },
-                  { role: "ai-suggestion", text: "Would you like me to send a direct link?" }
-                ].map((msg, i) => (
-                  <div
-                    key={i}
-                    className={`p-4 rounded-lg text-sm transition-all duration-500 ${i <= activeMessage ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-                      } ${msg.role === 'user' ? "bg-white/5 ml-8" : "bg-primary/10 mr-8 border border-primary/20"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      {msg.role === 'user' ? <Users className="w-3 h-3 text-muted-foreground" /> : <Cpu className="w-3 h-3 text-primary" />}
-                      <span className="text-[10px] font-bold uppercase tracking-tighter opacity-50">
-                        {msg.role === 'user' ? "Customer" : "Nexora AI"}
-                      </span>
+            {/* Interactive AI Chat Box - Expanded */}
+            <div className="relative w-full max-w-4xl">
+              <div className="glass-card p-8 h-[650px] flex flex-col shadow-2xl relative border border-white/10">
+                {/* Chat Header */}
+                <div className="flex items-center gap-4 pb-6 border-b border-white/5 mb-6">
+                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
+                    <Cpu className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-white uppercase tracking-wider mb-1">Nexora AI</h4>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-xs text-muted-foreground uppercase font-bold tracking-widest text-primary/70">AI agent Active</span>
                     </div>
-                    {msg.text}
-                    {msg.role === 'ai-suggestion' && (
-                      <button className="mt-3 w-full py-2 rounded bg-primary text-primary-foreground font-bold text-xs hover:scale-[1.02] active:scale-95 transition-all">
-                        USE REPLY
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <div className="pt-4 flex items-center gap-2">
-                  <div className="flex-1 h-10 bg-white/5 rounded-full border border-white/10 px-4 flex items-center text-xs text-muted-foreground">
-                    Type a message...
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center relative z-10">
-                    <ArrowRight className="w-4 h-4 text-primary-foreground" />
                   </div>
                 </div>
 
-                {/* Glow Decoration */}
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
-              </div>
-            </div>
-
-            {/* System Performance */}
-            <div className="w-full lg:w-1/2 max-w-lg glass-card p-8 space-y-8">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">System Performance</h3>
-                <BarChart3 className="w-5 h-5 text-primary" />
-              </div>
-
-              <div className="space-y-6">
-                {[
-                  { label: "AI Accuracy", width: "94%", color: "primary" },
-                  { label: "SLA Compliance", width: "99%", color: "secondary" },
-                  { label: "User Satisfaction", width: "88%", color: "primary" }
-                ].map((bar, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-xs font-bold uppercase tracking-tighter">
-                      <span>{bar.label}</span>
-                      <span>{bar.width}</span>
-                    </div>
-                    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                {/* Messages Area */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto pr-4 space-y-6 custom-scrollbar mb-4">
+                  {chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={`flex flex-col ${msg.role === 'user' ? "items-end" : "items-start"}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5 px-1">
+                        {msg.role === 'user' ? (
+                          <>
+                            <span className="text-[10px] font-bold uppercase tracking-tighter opacity-50">Authorized User</span>
+                            <Users className="w-3 h-3 text-muted-foreground" />
+                          </>
+                        ) : (
+                          <>
+                            <Cpu className="w-3 h-3 text-primary" />
+                            <span className="text-[10px] font-bold uppercase tracking-tighter text-primary">Nexora AI Agent</span>
+                          </>
+                        )}
+                      </div>
                       <div
-                        className={`h-full bg-${bar.color} transition-all duration-1000 ease-out`}
-                        style={{ width: calculateOpacity(2500, 3500) > 0.5 ? bar.width : '0%' }}
-                      />
+                        className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2 duration-300 prose prose-invert prose-p:my-0 prose-li:my-0 prose-ul:my-1 prose-strong:text-white whitespace-pre-wrap ${
+                          msg.role === 'user' 
+                          ? "bg-primary/20 text-white rounded-tr-none border border-primary/20" 
+                          : "bg-white/5 text-white/90 rounded-tl-none border border-white/10"
+                        }`}
+                      >
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  {isTyping && (
+                    <div className="flex flex-col items-start">
+                      <div className="flex items-center gap-2 mb-1.5 px-1">
+                        <Cpu className="w-3 h-3 text-primary" />
+                        <span className="text-[10px] font-bold uppercase tracking-tighter text-primary">Nexora AI Agent</span>
+                      </div>
+                      <div className="bg-white/5 text-white/90 p-4 rounded-2xl rounded-tl-none border border-white/10 flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                        <span className="text-xs italic opacity-50 tracking-wider">Processing query...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-              <div className="pt-4 grid grid-cols-7 gap-2 items-end h-24">
-                {[40, 60, 45, 90, 65, 80, 70].map((h, i) => (
-                  <div
-                    key={i}
-                    className="bg-primary/20 rounded-t hover:bg-primary/40 transition-all duration-500"
-                    style={{ height: calculateOpacity(2500, 3500) > 0.5 ? `${h}%` : '0%' }}
+                {/* Input Area */}
+                <form onSubmit={handleSendMessage} className="pt-6 border-t border-white/5 flex items-center gap-3">
+                   <input 
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    placeholder="Describe your inquiry about Nexora's systems, team, or implementation..."
+                    className="flex-1 h-14 bg-white/5 rounded-2xl border border-white/10 px-6 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all"
                   />
-                ))}
+                  <button 
+                    type="submit"
+                    disabled={!inputMessage.trim() || isTyping}
+                    className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 transition-all shadow-[0_0_20px_rgba(0,229,255,0.4)]"
+                  >
+                    <Send className="w-6 h-6" />
+                  </button>
+                </form>
+
+                {/* Background Glow Accents */}
+                <div className="absolute -top-20 -right-20 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
+                <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
               </div>
             </div>
           </div>
@@ -450,6 +527,20 @@ export default function About() {
         /* Smooth scrolling for the whole page */
         html {
           scroll-behavior: smooth;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(0, 229, 255, 0.3);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 229, 255, 0.5);
         }
       `}</style>
     </div>

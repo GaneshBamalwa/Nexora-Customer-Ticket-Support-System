@@ -214,10 +214,21 @@ export async function aiSuggest() {
   return request("/ai/suggest", { method: "POST" });
 }
 
+export async function aiQuery(query: string) {
+  return request("/ai/query", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
+}
+
 // ─── SQL CONSOLE ────────────────────────────────────────────────────────────
 
 export async function getSqlMetadata() {
   return request("/sql/metadata");
+}
+
+export async function getPublicStats() {
+  return request("/public/stats");
 }
 
 export async function runSqlQuery(query: string) {

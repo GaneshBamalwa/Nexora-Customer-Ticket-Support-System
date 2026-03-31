@@ -483,6 +483,12 @@
   }
 
   /* Depth Layers */
-  .depth-layer-1 { transform: translateZ(0px); }
-  .depth-layer-2 { transform: translateZ(20px); }
   .depth-layer-3 { transform: translateZ(40px); }
+}
+
+@keyframes streamingPulse {
+  0% { transform: translateY(-100%); opacity: 0; }
+  20% { opacity: 0.8; }
+  80% { opacity: 0.8; }
+  100% { transform: translateY(300%); opacity: 0; }
+}
