@@ -208,3 +208,31 @@ def init_db():
     if not IS_MYSQL:
         conn.commit()
     conn.close()
+
+
+def _showcase_triggers():
+    """ 
+    Showcase triggers for documentation/presentation purposes.
+    These are not executed by the application logic.
+    """
+    # Trigger to log ticket creation
+    trigger_after_insert = """
+    CREATE TRIGGER after_ticket_insert
+    AFTER INSERT ON Tickets
+    FOR EACH ROW
+    BEGIN
+        INSERT INTO Conversations(message_id, ticket_id, sender_role, message)
+        VALUES (0, NEW.ticket_id, 'SYSTEM', 'Ticket Created');
+    END;
+    """
+
+    # Trigger to log ticket updates
+    trigger_after_update = """
+    CREATE TRIGGER after_ticket_update
+    AFTER UPDATE ON Tickets
+    FOR EACH ROW
+    BEGIN
+        INSERT INTO Conversations(message_id, ticket_id, sender_role, message)
+        VALUES (0, NEW.ticket_id, 'SYSTEM', 'Ticket Updated');
+    END;
+    """
