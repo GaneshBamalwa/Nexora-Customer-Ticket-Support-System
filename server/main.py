@@ -134,17 +134,22 @@ async def startup_event():
 
 # ─── MIDDLEWARE ──────────────────────────────────────────────────────────────
 
-ALLOWED_ORIGINS = [origin.strip() for origin in os.environ.get("CORS_ORIGIN", "*").split(",")]
+# CORS Configuration
+# ──────────────────
+# Using a flexible approach that supports both local dev and production Railway urls.
+# If CORS_ORIGIN is not provided, it defaults to "*" for convenience in testing.
+cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGIN", "*").split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_origins=cors_origins,
+    allow_credentials=False, # Set to False since we use 'Authorization' header instead of cookies
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*.railway.app", "*.ngrok-free.app", "*.ngrok.io"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*.railway.app", "*.ngrok-free.app", "*.ngrok.io", "*.vercel.app"]
 if os.environ.get("PROD_DOMAIN"):
     ALLOWED_HOSTS.append(os.environ.get("PROD_DOMAIN"))
 else:
