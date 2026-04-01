@@ -204,7 +204,7 @@ export default function About() {
       <section className="py-40 relative z-10 border-t border-white/5">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-bold text-center mb-20 fade-slide-in">The Architects</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto materialize">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto materialize">
             {[
               {
                 name: "Ganesh Bamalwa",
@@ -219,13 +219,6 @@ export default function About() {
                 bio: "Backend designer and SQL expert",
                 linkedin: "https://www.linkedin.com/in/rudransh-kadiveti-2b3b96292",
                 github: "https://github.com/RudranshKadiveti",
-              },
-              {
-                name: "Manohar Adimalla",
-                role: "Backend Systems Lead",
-                bio: "Database optimization and API design. PostgreSQL & microservices expert.",
-                linkedin: "https://in.linkedin.com/in/naga-manohar-adimalla-a7773b326",
-                github: "https://github.com/Manohar9111",
               },
             ].map((developer, idx) => (
               <div

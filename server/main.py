@@ -323,16 +323,34 @@ async def search_history(request: Request, body: SearchHistoryRequest):
 
 @app.get("/api/tickets/{ticket_id}/conversation")
 @limiter.limit(RATE_LIMIT_API)
-async def get_conversation(request: Request, ticket_id: int):
-    """Public: view the conversation thread for a ticket."""
+async def get_conversation(request: Request, ticket_id: int, email: Optional[str] = None):
+    """View the conversation thread for a ticket. Requires staff auth OR matching email."""
+    # Try to identify staff user
+    user = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            user = get_current_user(request)
+        except Exception:
+            pass
+
     conn = get_db_conn()
     cursor = conn.cursor()
     try:
-        execute_query(cursor,
-            f"SELECT * FROM Tickets WHERE Ticket_ID = {PH}", (ticket_id,))
+        execute_query(cursor, f"SELECT * FROM Tickets WHERE Ticket_ID = {PH}", (ticket_id,))
         ticket = fetch_one(cursor)
         if not ticket:
             raise HTTPException(404, "Ticket not found")
+
+        # SECURITY CHECK: If guest, must provide matching email
+        if not user:
+            if not email:
+                raise HTTPException(401, "Identification required (provide email or log in).")
+            execute_query(cursor, f"SELECT Email_ID FROM Customers WHERE Customer_ID = {PH}", (ticket["Customer_ID"],))
+            customer = fetch_one(cursor)
+            if not customer or customer["Email_ID"].lower() != email.strip().lower():
+                raise HTTPException(403, "Access denied. You do not have permission to view this conversation.")
+
         execute_query(cursor,
             f"SELECT * FROM Ticket_Conversations WHERE Ticket_ID = {PH} "
             f"ORDER BY Timestamp ASC", (ticket_id,))
@@ -345,27 +363,36 @@ async def get_conversation(request: Request, ticket_id: int):
 @app.post("/api/tickets/{ticket_id}/conversation")
 @limiter.limit(RATE_LIMIT_API)
 async def post_conversation(request: Request, ticket_id: int,
-                            body: ConversationMessage):
-    """Public / Authenticated: add a message to a ticket conversation."""
+                            body: ConversationMessage, email: Optional[str] = None):
+    """Add a message to a ticket conversation. Staff or verified customer only."""
     # Determine sender role from auth token (if present) or default to Customer
     role = "Customer"
+    user = None
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         try:
             user = get_current_user(request)
             role = user.get("role", "Customer")
-        except HTTPException:
+        except Exception:
             pass
 
     conn = get_db_conn()
     cursor = conn.cursor()
     try:
         # Verify ticket exists
-        execute_query(cursor,
-            f"SELECT Ticket_ID FROM Tickets WHERE Ticket_ID = {PH}",
-            (ticket_id,))
-        if not fetch_one(cursor):
+        execute_query(cursor, f"SELECT Customer_ID FROM Tickets WHERE Ticket_ID = {PH}", (ticket_id,))
+        ticket = fetch_one(cursor)
+        if not ticket:
             raise HTTPException(404, "Ticket not found")
+
+        # SECURITY CHECK: If guest, verify email
+        if not user:
+            if not email:
+                raise HTTPException(401, "Permission denied. Email required for guest posting.")
+            execute_query(cursor, f"SELECT Email_ID FROM Customers WHERE Customer_ID = {PH}", (ticket["Customer_ID"],))
+            customer = fetch_one(cursor)
+            if not customer or customer["Email_ID"].lower() != email.strip().lower():
+                raise HTTPException(403, "Permission denied. You cannot post to this ticket.")
 
         execute_query(cursor,
             f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) "
@@ -1070,15 +1097,22 @@ async def ai_query(request: Request, body: SqlQueryRequest):
         - JWT-based authentication and Bcrypt password hashing.
         - Role-based access control (Admin, Agent, Customer).
         - Rate limiting and IDOR prevention for safety.
+        DATABASE ARCHITECTURE:
+        - Hybrid Strategy: Supports SQLite for local development (support_portal.db) and MySQL/MariaDB for production deployments.
+        - Connectivity Logic: Centralized in `server/db.py`. It dynamically switches drivers based on environment variables like `MYSQLHOST`.
+        - Parameterized Queries: Every database interaction uses raw SQL with placeholders (%s or ?) to completely eliminate SQL injection risks.
+        - Data Flow: React Frontend -> FastAPI Backend (Pydantic validation) -> db.py Execution -> process_row() formatting -> JSON Response.
+        - Schemas: Five primary tables (Customers, Support_Agents, Tickets, Ticket_Conversations, and Password_Change_Requests).
         ARCHITECTURE:
         - Frontend: React + Vite + TailwindCSS + Lucide Icons + Wouter.
         - Backend: FastAPI (Python) + SQLite/MySQL.
-        TEAM: Ganesh Bamalwa, Rudransh Kadiveti, Manohar Adimalla.
+        TEAM: Ganesh Bamalwa, Rudransh Kadiveti.
         RULES:
         - ALWAYS answer using well-structured Markdown.
         - Use bullet points, bold text for headings, and proper line breaks between sections.
         - Ensure lists and multi-point answers are formatted clearly (one point per line).
         - Answer questions about Nexora professionally and concisely.
+        - If the question is about database connectivity, explain the hybrid MySQL/SQLite approach and the parameterization security.
         - If the question is outside scope, say: "I'm sorry, but I can only answer questions related to the Nexora project and support operations."
         """
 
