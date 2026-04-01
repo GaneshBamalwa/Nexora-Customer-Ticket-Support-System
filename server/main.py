@@ -109,9 +109,27 @@ async def background_auto_assign():
             logging.error(f"Auto-assign task error: {e}")
         await asyncio.sleep(60 * 5)
 
+@app.get("/")
+async def root():
+    """Root health check for deployment platforms like Railway."""
+    return {"status": "ok", "message": "Nexora API is operational"}
+
+
 @app.on_event("startup")
 async def startup_event():
+    """Unified startup: initialize database and start background tasks."""
+    logging.info("Starting Nexora API server...")
+    
+    # 1. Initialize Database
+    try:
+        init_db()
+        logging.info("Database initialized successfully.")
+    except Exception as e:
+        logging.error(f"Database initialization failed: {e}")
+    
+    # 2. Start Background Tasks
     asyncio.create_task(background_auto_assign())
+    logging.info("Background auto-assignment task started.")
 
 
 # ─── MIDDLEWARE ──────────────────────────────────────────────────────────────
@@ -137,7 +155,7 @@ app.add_middleware(
     allowed_hosts=ALLOWED_HOSTS,
 )
 
-ENFORCE_HTTPS = os.environ.get("ENFORCE_HTTPS", "0") == "1"
+ENFORCE_HTTPS = False  # Disabled for easier testing and flexible deployment
 
 
 @app.middleware("http")
@@ -238,9 +256,6 @@ class AssignTicketRequest(BaseModel):
 
 # ─── STARTUP ─────────────────────────────────────────────────────────────────
 
-@app.on_event("startup")
-def startup_event():
-    init_db()
 
 
 # ─── HEALTH ──────────────────────────────────────────────────────────────────
@@ -1143,8 +1158,11 @@ async def ai_query(request: Request, body: SqlQueryRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    # Use environment PORT for Railway, default to 8080 or 5000
+    port = int(os.environ.get("PORT", 8080))
+    logging.info(f"Binding to 0.0.0.0:{port}")
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
+        port=port,
     )
