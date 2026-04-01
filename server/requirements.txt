@@ -10,4 +10,5 @@ slowapi==0.1.9
 python-jose[cryptography]==3.4.0
 secure==0.3.0
 cryptography==43.0.0
+openai==1.6.0
 email-validator>=2.0.0

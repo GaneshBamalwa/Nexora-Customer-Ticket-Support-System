@@ -116,19 +116,25 @@ async def startup_event():
 
 # ─── MIDDLEWARE ──────────────────────────────────────────────────────────────
 
-CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "*")
+ALLOWED_ORIGINS = [origin.strip() for origin in os.environ.get("CORS_ORIGIN", "*").split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
 )
 
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*.railway.app", "*.ngrok-free.app", "*.ngrok.io"]
+if os.environ.get("PROD_DOMAIN"):
+    ALLOWED_HOSTS.append(os.environ.get("PROD_DOMAIN"))
+else:
+    ALLOWED_HOSTS.append("*")
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.railway.app", "*.ngrok-free.app", "*.ngrok.io", "*"],
+    allowed_hosts=ALLOWED_HOSTS,
 )
 
 ENFORCE_HTTPS = os.environ.get("ENFORCE_HTTPS", "0") == "1"

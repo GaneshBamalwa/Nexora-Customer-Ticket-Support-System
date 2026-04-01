@@ -5,7 +5,7 @@
  * error handling, and type-safe request helpers.
  */
 
-const API_BASE = "/api";
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "") + "/api";
 
 function getToken(): string | null {
   return localStorage.getItem("nexora_token");
@@ -89,12 +89,14 @@ export async function searchHistory(data: {
   });
 }
 
-export async function getConversation(ticketId: number) {
-  return request(`/tickets/${ticketId}/conversation`);
+export async function getConversation(ticketId: number, email?: string) {
+  const query = email ? `?email=${encodeURIComponent(email)}` : "";
+  return request(`/tickets/${ticketId}/conversation${query}`);
 }
 
-export async function postConversation(ticketId: number, message: string) {
-  return request(`/tickets/${ticketId}/conversation`, {
+export async function postConversation(ticketId: number, message: string, email?: string) {
+  const query = email ? `?email=${encodeURIComponent(email)}` : "";
+  return request(`/tickets/${ticketId}/conversation${query}`, {
     method: "POST",
     body: JSON.stringify({ message }),
   });
