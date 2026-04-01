@@ -19,6 +19,7 @@ import {
   Trash2,
   Table as TableIcon,
   AlertTriangle,
+  Download,
 } from "lucide-react";
 import ErDiagram from "../components/ErDiagram";
 
@@ -84,6 +85,34 @@ export default function SqlConsole() {
     setHistory([]);
     localStorage.removeItem("sql_history");
     setShowHistory(false);
+  };
+
+  const downloadCSV = () => {
+    if (!result || !result.columns || result.rows.length === 0) return;
+
+    const headers = result.columns.join(",");
+    const rows = result.rows.map((row) =>
+      result.columns
+        .map((col) => {
+          const val = row[col];
+          const str = (val === null || val === undefined) ? "" : String(val);
+          // Escape quotes and wrap in quotes
+          return `"${str.replace(/"/g, '""')}"`;
+        })
+        .join(",")
+    );
+
+    const csvContent = [headers, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `query_results_${new Date().getTime()}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV Downloaded");
   };
 
   const handleRunQuery = async () => {
@@ -236,7 +265,7 @@ export default function SqlConsole() {
           <div className="mt-8 rounded-xl border border-white/[0.08] bg-black/20 overflow-hidden">
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-[#00e5ff] uppercase bg-[#00e5ff]/5 sticky top-0 font-syne tracking-wider">
+                <thead className="text-xs text-[#00e5ff] uppercase bg-[#0a1128] sticky top-0 font-syne tracking-wider z-10">
                   <tr>
                     {result.columns.map((col, idx) => (
                       <th key={idx} className="px-6 py-4 border-b border-white/[0.08] whitespace-nowrap">
@@ -265,8 +294,18 @@ export default function SqlConsole() {
                 </tbody>
               </table>
             </div>
-            <div className="px-6 py-3 bg-white/[0.02] border-t border-white/[0.08] text-xs text-slate-500 flex justify-between">
+            <div className="px-6 py-3 bg-white/[0.02] border-t border-white/[0.08] text-xs text-slate-500 flex justify-between items-center">
               <span>{result.message}</span>
+              {result.rows.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadCSV}
+                  className="h-7 text-[#00e5ff] hover:text-white hover:bg-[#00e5ff]/10 gap-2 border border-[#00e5ff]/20"
+                >
+                  <Download className="w-3 h-3" /> Download CSV
+                </Button>
+              )}
             </div>
           </div>
         )}

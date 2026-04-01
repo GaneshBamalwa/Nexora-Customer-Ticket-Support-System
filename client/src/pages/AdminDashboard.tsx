@@ -454,7 +454,7 @@ export default function AdminDashboard() {
                               <SelectTrigger className="bg-white/5 border-white/10 w-32 h-8 text-[10px] font-bold">
                                 <SelectValue placeholder="Quick Assign" />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="bg-[#020818] border-white/10 shadow-2xl z-50">
                                 {agentsList.map((a: any) => (
                                   <SelectItem key={a.Agent_ID} value={String(a.Agent_ID)}>{a.Name}</SelectItem>
                                 ))}
@@ -587,7 +587,7 @@ export default function AdminDashboard() {
                   <div className="flex gap-4">
                     <Select value={newAgent.role} onValueChange={(v) => setNewAgent({ ...newAgent, role: v })}>
                          <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
-                         <SelectContent>
+                         <SelectContent className="bg-[#020818] border-white/10 shadow-2xl z-50">
                            <SelectItem value="Agent">Support Node</SelectItem>
                            <SelectItem value="Administrator">Lead Overseer</SelectItem>
                          </SelectContent>

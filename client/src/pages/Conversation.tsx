@@ -26,7 +26,8 @@ export default function Conversation() {
   const fetchConversation = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const data = await getConversation(ticketId);
+      const email = !isAuthenticated() ? sessionStorage.getItem("trackingEmail") || "" : undefined;
+      const data = await getConversation(ticketId, email);
       setTicket(data.ticket);
       setMessages(data.messages || []);
     } catch (err: any) {
@@ -40,7 +41,8 @@ export default function Conversation() {
     if (!newMessage.trim()) return;
     setSending(true);
     try {
-      await postConversation(ticketId, newMessage);
+      const email = !isAuthenticated() ? sessionStorage.getItem("trackingEmail") || "" : undefined;
+      await postConversation(ticketId, newMessage, email);
       setNewMessage("");
       fetchConversation(true);
     } catch (err: any) {
@@ -141,38 +143,43 @@ export default function Conversation() {
               <p>No messages yet. Start the conversation!</p>
             </div>
           ) : (
-            messages.map((msg: any, idx: number) => (
-              <div
-                key={msg.Message_ID || idx}
-                className={`flex gap-3 ${msg.Sender_Role === "Customer" ? "justify-start" : "justify-end"}`}
-              >
-                {msg.Sender_Role === "Customer" && (
-                  <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
-                    {getSenderIcon(msg.Sender_Role)}
+            messages.map((msg: any, idx: number) => {
+              const isStaff = isAuthenticated();
+              const isMe = isStaff ? msg.Sender_Role !== "Customer" : msg.Sender_Role === "Customer";
+              
+              return (
+                <div
+                  key={msg.Message_ID || idx}
+                  className={`flex gap-3 ${isMe ? "justify-end" : "justify-start"}`}
+                >
+                  {!isMe && (
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                      {getSenderIcon(msg.Sender_Role)}
+                    </div>
+                  )}
+                  <div className={`max-w-lg p-4 rounded-2xl ${
+                    isMe
+                      ? "bg-primary/10 border border-primary/20"
+                      : "bg-white/5 border border-white/10"
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                        {msg.Sender_Role}
+                      </span>
+                      <span className="text-[10px] opacity-40">
+                        {msg.Timestamp ? new Date(msg.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                      </span>
+                    </div>
+                    <p className="text-sm">{msg.Message_Text}</p>
                   </div>
-                )}
-                <div className={`max-w-lg p-4 rounded-2xl ${
-                  msg.Sender_Role === "Customer"
-                    ? "bg-white/5 border border-white/10"
-                    : "bg-primary/10 border border-primary/20"
-                }`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">
-                      {msg.Sender_Role}
-                    </span>
-                    <span className="text-[10px] opacity-40">
-                      {msg.Timestamp ? new Date(msg.Timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                    </span>
-                  </div>
-                  <p className="text-sm">{msg.Message_Text}</p>
+                  {isMe && (
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                      {getSenderIcon(msg.Sender_Role)}
+                    </div>
+                  )}
                 </div>
-                {msg.Sender_Role !== "Customer" && (
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                    {getSenderIcon(msg.Sender_Role)}
-                  </div>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

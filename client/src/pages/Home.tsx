@@ -7,6 +7,7 @@ import { Link } from "wouter";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
 import { raiseTicket, searchHistory, rateTicket, followUp } from "@/api";
 import { toast } from "sonner";
+import confetti from "canvas-confetti";
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -109,6 +110,30 @@ export default function Home() {
     } catch (err: any) {
       toast.error(err.message);
     }
+  };
+
+  const triggerConfetti = () => {
+    const end = Date.now() + 1.5 * 1000; // 1.5 seconds
+    const frame = () => {
+      confetti({
+        particleCount: 2,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: ['#00e5ff', '#b537f2', '#ffffff']
+      });
+      confetti({
+        particleCount: 2,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: ['#00e5ff', '#b537f2', '#ffffff']
+      });
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+    frame();
   };
 
   const features = [
@@ -475,8 +500,11 @@ export default function Home() {
       <footer className="py-12 border-t border-white/5 bg-[#020818] relative z-10">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tighter">NEXORA</span>
+            <div className="flex items-center gap-2 select-none">
+              <span 
+                onClick={triggerConfetti}
+                className="text-lg font-bold tracking-tighter cursor-default hover:text-primary transition-colors"
+              >NEXORA</span>
             </div>
             <p className="text-sm text-muted-foreground">&copy; 2026 Nexora. Built for the future.</p>
             <div className="flex gap-6">
