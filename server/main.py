@@ -38,11 +38,11 @@ from slowapi.errors import RateLimitExceeded
 import bcrypt
 from openai import OpenAI
 
-from db import (
+from .db import (
     get_db_conn, execute_query, fetch_one, fetch_all,
     process_row, init_db, IS_MYSQL, PH, _verify_pw
 )
-from auth import (
+from .auth import (
     create_token, get_current_user, require_admin,
     require_owner_or_admin,
 )
