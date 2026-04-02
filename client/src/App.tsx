@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { CustomCursor } from "./components/CustomCursor";
+import { FeatureDiscoveryPanel } from "./components/FeatureDiscoveryPanel";
 import NotFound from "./pages/NotFound";
 import { Route, Switch, Redirect } from "wouter";
 import { useAuth } from "./contexts/AuthContext";
@@ -18,16 +19,36 @@ import AdminDashboard from "./pages/AdminDashboard";
 import Conversation from "./pages/Conversation";
 import SetPassword from "./pages/SetPassword";
 import SqlConsole from "./pages/SqlConsole";
+import DemoStart from "./pages/DemoStart";
 
 function Router() {
+  const { authenticated, user, loading } = useAuth();
+  const role = (user?.Role || user?.role || "").toLowerCase();
+  const isDemo = role === "demoagent";
+
   return (
     <Switch>
+      {/* Demo Specific Routes */}
+      <Route path="/demo-start" component={DemoStart} />
+
       {/* Specific Protected Pages FIRST */}
-      <Route path="/agent-dashboard"><ProtectedRoute roles={["Agent", "Administrator"]}><AgentDashboard /></ProtectedRoute></Route>
-      <Route path="/admin-dashboard"><ProtectedRoute roles={["Administrator"]}><AdminDashboard /></ProtectedRoute></Route>
-      <Route path="/conversation/:ticketId"><ProtectedRoute roles={["Customer", "Agent", "Administrator"]}><Conversation /></ProtectedRoute></Route>
+      <Route path="/agent-dashboard">
+        <ProtectedRoute roles={["Agent", "Administrator"]}>
+          {isDemo ? <Redirect to="/admin-dashboard" /> : <AgentDashboard />}
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin-dashboard">
+        <ProtectedRoute roles={["Administrator", "DemoAgent"]}>
+          <AdminDashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/conversation/:ticketId">
+        <ProtectedRoute roles={["Customer", "Agent", "Administrator", "DemoAgent"]}>
+          <Conversation />
+        </ProtectedRoute>
+      </Route>
       <Route path="/set-password"><ProtectedRoute roles={["Agent", "Administrator"]}><SetPassword /></ProtectedRoute></Route>
-      <Route path="/sql-console"><ProtectedRoute roles={["Administrator"]}><SqlConsole /></ProtectedRoute></Route>
+      <Route path="/sql-console"><ProtectedRoute roles={["Administrator", "DemoAgent"]}><SqlConsole /></ProtectedRoute></Route>
       <Route path="/portal"><ProtectedRoute roles={["Customer"]}><Home /></ProtectedRoute></Route>
 
       {/* Public Pages */}
@@ -45,15 +66,12 @@ function Router() {
       {/* Home / Entry Page - UNIFIED */}
       <Route path="/">
         {() => {
-          const { authenticated, user, loading } = useAuth();
           if (loading) return null;
           
-          // If staff is logged in, send them to dashboard
           if (authenticated && user) {
-            const role = (user?.Role || user?.role || "").toLowerCase();
             if (role === "administrator") return <Redirect to="/admin-dashboard" />;
             if (role === "agent") return <Redirect to="/agent-dashboard" />;
-            // Customers stay on this Home page
+            if (role === "demoagent") return <Redirect to="/admin-dashboard" />;
           }
           
           return <Home />;
@@ -74,6 +92,7 @@ function App() {
         <AuthProvider>
           <TooltipProvider>
             <CustomCursor />
+            <FeatureDiscoveryPanel />
             <Toaster />
             <Router />
           </TooltipProvider>

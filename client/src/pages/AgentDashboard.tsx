@@ -11,11 +11,14 @@ import { getDashboard, resolveTicket, assignTicket, logout, isAuthenticated, get
 import { toast } from "sonner";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { useDemoMission } from "@/hooks/useDemoMission";
 
 type Section = "dashboard" | "my-tickets" | "active-tickets";
 
 export default function AgentDashboard() {
   const { user, authenticated, logout } = useAuth();
+  const { currentStep } = useDemoMission();
   const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
@@ -29,6 +32,7 @@ export default function AgentDashboard() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pwRequestLoading, setPwRequestLoading] = useState(false);
+  const isDemo = !!(user as any)?.is_demo;
 
   useEffect(() => {
     // ProtectedRoute handles the main auth and role check.
@@ -150,6 +154,12 @@ export default function AgentDashboard() {
               {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
             <span className="text-xl font-black text-primary neon-glow tracking-tighter uppercase">Nexora Agent</span>
+            {isDemo && (
+              <span className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] bg-secondary/20 border border-secondary/40 text-secondary animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-secondary inline-block" />
+                Demo
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-6">
@@ -322,15 +332,25 @@ export default function AgentDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {displayTickets.map((ticket) => (
-                        <tr key={ticket.Ticket_ID} className="hover:bg-primary/5 transition-all group/row">
-                          <td className="px-6 py-5">
-                            <span className="text-xs font-mono font-bold text-primary">#{String(ticket.Ticket_ID).padStart(4, '0')}</span>
-                          </td>
-                          <td className="px-6 py-5">
-                            <p className="text-sm font-bold text-foreground group-hover/row:text-primary transition-colors">{ticket.Subject}</p>
-                            <p className="text-[10px] text-muted-foreground opacity-60">LOG: {new Date(ticket.Created_Date).toLocaleDateString()}</p>
-                          </td>
+                      {displayTickets.map((ticket, idx) => {
+                        const isMissionTarget = isDemo && currentStep === 'create_ticket' && idx === 0;
+                        return (
+                          <tr key={ticket.Ticket_ID} className={cn(
+                            "hover:bg-primary/5 transition-all group/row",
+                            isMissionTarget && "mission-pulse bg-primary/10"
+                          )}>
+                            <td className="px-6 py-5">
+                              <span className="text-xs font-mono font-bold text-primary">#{String(ticket.Ticket_ID).padStart(4, '0')}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-foreground group-hover/row:text-primary transition-colors">{ticket.Subject}</p>
+                                {isMissionTarget && (
+                                  <span className="text-[8px] px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-black uppercase tracking-tighter">Mission Target</span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground opacity-60">LOG: {new Date(ticket.Created_Date).toLocaleDateString()}</p>
+                            </td>
                           <td className="px-6 py-5">{getStatusBadge(ticket.Status)}</td>
                           <td className="px-6 py-5">{getPriorityBadge(ticket.Priority)}</td>
                           <td className="px-6 py-5 text-right">
@@ -381,7 +401,8 @@ export default function AgentDashboard() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

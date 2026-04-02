@@ -155,7 +155,7 @@ export default function SqlConsole() {
             className="text-slate-400 hover:text-white"
             onClick={() => {
               const r = user?.Role || user?.role;
-              setLocation(r === "Administrator" ? "/admin-dashboard" : "/agent-dashboard");
+              setLocation(r === "Administrator" || r === "DemoAgent" ? "/admin-dashboard" : "/agent-dashboard");
             }}
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Dashboard

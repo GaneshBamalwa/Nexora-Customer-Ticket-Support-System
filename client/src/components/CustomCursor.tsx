@@ -4,8 +4,19 @@ export const CustomCursor = () => {
   const [position, setPosition] = useState({ x: -100, y: -100 });
   const [isHovering, setIsHovering] = useState(false);
   const [isClicking, setIsClicking] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    // Check if device supports fine mover (mouse) AND is not a touch device
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+    
+    if (isTouchDevice || !hasFinePointer) {
+      setIsVisible(false);
+      return;
+    }
+
+    setIsVisible(true);
     const handleMouseMove = (e: MouseEvent) => {
       setPosition({ x: e.clientX, y: e.clientY });
     };
@@ -40,6 +51,8 @@ export const CustomCursor = () => {
       window.removeEventListener('mouseover', handleMouseOver);
     };
   }, []);
+
+  if (!isVisible) return null;
 
   return (
     <>

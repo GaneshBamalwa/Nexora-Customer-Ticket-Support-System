@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
-import { ArrowLeft, Send, MessageSquare, User, Cpu } from "lucide-react";
+import { ArrowLeft, Send, MessageSquare, User, Cpu, CheckCircle } from "lucide-react";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
-import { getConversation, postConversation, aiSuggest } from "@/api";
+import { getConversation, postConversation, aiSuggest, resolveTicket } from "@/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDemoMission } from "@/hooks/useDemoMission";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function Conversation() {
   const { authenticated, user } = useAuth();
+  const { checklist, isDemo } = useDemoMission();
   const params = useParams<{ ticketId: string }>();
   const ticketId = parseInt(params.ticketId || "0");
   const [ticket, setTicket] = useState<any>(null);
@@ -66,6 +69,16 @@ export default function Conversation() {
     }
   };
 
+  const handleResolve = async () => {
+    try {
+      await resolveTicket(ticketId);
+      toast.success("Ticket resolved successfully!");
+      fetchConversation();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -102,13 +115,21 @@ export default function Conversation() {
             </div>
             <span className="text-sm font-semibold text-muted-foreground group-hover:text-primary transition-colors">Back</span>
           </button>
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-primary" />
-            <span className="text-lg font-bold text-primary neon-glow">
-              Ticket #{ticketId}
-            </span>
+          <div className="flex items-center gap-3">
+            {authenticated && user?.Role !== "Customer" && ticket?.Status !== "Resolved" && (
+              <button 
+                onClick={handleResolve}
+                className={cn(
+                  "hidden sm:flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-black rounded-lg hover:bg-green-500/20 transition-all active:scale-95",
+                  isDemo && checklist.ticket_replied && !checklist.ticket_resolved && "mission-pulse"
+                )}
+              >
+                <CheckCircle className="w-4 h-4" />
+                RESOLVE TICKET
+              </button>
+            )}
+            <div className="w-6 sm:w-24"></div>
           </div>
-          <div className="w-24"></div>
         </div>
       </header>
 
@@ -204,26 +225,19 @@ export default function Conversation() {
                 onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
                 rows={1}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all resize-none shadow-inner"
+                className={cn(
+                  "flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all resize-none shadow-inner",
+                  isDemo && !checklist.ticket_replied && "mission-pulse"
+                )}
               />
-              {authenticated && user && user.Role !== "Customer" && (
-                <button
-                  onClick={handleAI}
-                  disabled={aiLoading || sending}
-                  className="px-4 rounded-xl border border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-50 flex items-center justify-center active:scale-95"
-                  title="AI Suggest"
-                >
-                  {aiLoading ? (
-                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Cpu className="w-4 h-4 text-primary" />
-                  )}
-                </button>
-              )}
+
               <button
                 onClick={handleSend}
                 disabled={sending || !newMessage.trim()}
-                className="px-6 rounded-xl bg-primary text-primary-foreground font-bold transition-all hover:shadow-[0_0_20px_rgba(0,229,255,0.4)] disabled:opacity-50 flex items-center gap-2 active:scale-95"
+                className={cn(
+                  "px-6 rounded-xl bg-primary text-primary-foreground font-bold transition-all hover:shadow-[0_0_20px_rgba(0,229,255,0.4)] disabled:opacity-50 flex items-center gap-2 active:scale-95",
+                  isDemo && !checklist.ticket_replied && "mission-pulse"
+                )}
               >
                 {sending ? (
                   <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />

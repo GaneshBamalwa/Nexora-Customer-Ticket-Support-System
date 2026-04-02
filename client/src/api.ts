@@ -30,6 +30,25 @@ function setStoredUser(user: any): void {
   localStorage.setItem("nexora_user", JSON.stringify(user));
 }
 
+/**
+ * API Event Subscription System
+ * ────────────────────────────
+ * Allows components to listen to successful API calls for tracking/discovery features.
+ */
+export type APIEvent = {
+  path: string;
+  method: string;
+};
+type APIListener = (event: APIEvent) => void;
+let listeners: APIListener[] = [];
+
+export function subscribeToAPI(cb: APIListener) {
+  listeners.push(cb);
+  return () => {
+    listeners = listeners.filter(l => l !== cb);
+  };
+}
+
 async function request<T = any>(
   path: string,
   options: RequestInit = {},
@@ -61,7 +80,12 @@ async function request<T = any>(
     throw new Error(data.detail || `Request failed (${response.status})`);
   }
 
-  return response.json();
+  const data = await response.json();
+  
+  // Trigger listeners
+  listeners.forEach(l => l({ path, method: options.method || "GET" }));
+  
+  return data;
 }
 
 // ─── PUBLIC ENDPOINTS ────────────────────────────────────────────────────────
@@ -169,6 +193,21 @@ export async function loginWithToken(token: string) {
 export function logout() {
   clearToken();
   window.location.href = "/";
+}
+
+export async function initializeDemo() {
+  const data = await request("/demo/initialize", { method: "POST" });
+  if (data.token) {
+    setToken(data.token);
+    setStoredUser({ ...data.user, is_demo: true, session_id: data.session_id });
+  }
+  return data;
+}
+
+export async function demoLogin() {
+  // Redirect to initialize for backward compatibility if needed, 
+  // but we should update callers to use initializeDemo
+  return initializeDemo();
 }
 
 export function isAuthenticated(): boolean {

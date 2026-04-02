@@ -242,6 +242,46 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def demo_context_middleware(request: Request, call_next):
+    """
+    Inspect every JWT and set is_demo_context/session_id_context for demo sessions.
+    This transparently routes ALL queries to isolated session DBs if available.
+    """
+    from .db import is_demo_context, session_id_context
+    from .auth import JWT_SECRET, JWT_ALGORITHM
+    import jwt as pyjwt
+
+    is_demo = False
+    session_id = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            payload = pyjwt.decode(
+                auth[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM],
+                options={"verify_exp": False}  # expiry checked elsewhere
+            )
+            is_demo = bool(payload.get("is_demo", False))
+            session_id = payload.get("session_id")
+        except Exception:
+            pass
+
+    demo_token = is_demo_context.set(is_demo)
+    sess_token = session_id_context.set(session_id)
+    try:
+        response = await call_next(request)
+    finally:
+        is_demo_context.reset(demo_token)
+        session_id_context.reset(sess_token)
+
+    if is_demo:
+        response.headers["X-Demo-Mode"] = "true"
+        if session_id:
+            response.headers["X-Demo-Session"] = session_id
+
+    return response
+
+
 # ─── PYDANTIC MODELS (input validation) ──────────────────────────────────────
 
 class TicketCreate(BaseModel):
@@ -456,10 +496,11 @@ async def post_conversation(request: Request, ticket_id: int,
     role = "Customer"
     user = None
     auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
+    # If explicitly simulating a guest or external email response, ignore the Bearer token
+    if not email and auth.startswith("Bearer "):
         try:
             user = get_current_user(request)
-            role = user.get("role", "Customer")
+            role = user.get("Role", "Customer")
         except Exception:
             pass
 
@@ -533,6 +574,77 @@ async def follow_up(request: Request, ticket_id: int):
 # ═══════════════════════════════════════════════════════════════════════════════
 #  AUTH ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/demo/initialize")
+@limiter.limit(RATE_LIMIT_LOGIN)
+async def demo_initialize(request: Request):
+    """
+    Initialize a fresh demo session:
+    1. Generate unique session ID
+    2. Create isolated DB file
+    3. Seed isolated DB with starter ticket
+    4. Return restricted JWT
+    """
+    import uuid
+    from .db import init_session_db, is_demo_context, session_id_context
+    
+    session_id = str(uuid.uuid4())[:12]
+    
+    # Initialize the specific DB for this session
+    init_session_db(session_id)
+    
+    # Set context so we fetch the user from the newly created DB
+    d_token = is_demo_context.set(True)
+    s_token = session_id_context.set(session_id)
+    
+    try:
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        try:
+            execute_query(cursor, f"SELECT * FROM Demo_Support_Agents WHERE Email_ID = {PH}", ("demo@nexora.io",))
+            user = fetch_one(cursor)
+            
+            if not user:
+                raise HTTPException(500, "Demo user seeding failed.")
+            
+            # Create a bespoke token carrying the session_id and restricted role
+            # session_id ensures middleware routes future requests to the right DB
+            payload = {
+                "Agent_ID": user["Agent_ID"],
+                "Name": user.get("Name", "Demo Recruiter"),
+                "Email_ID": user["Email_ID"],
+                "Role": "DemoAgent", # Restricted role
+                "is_demo": True,
+                "session_id": session_id,
+                "exp": datetime.utcnow() + timedelta(hours=8)
+            }
+            import jwt as pyjwt
+            from .auth import JWT_SECRET, JWT_ALGORITHM
+            jwt_token = pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+            
+            return {
+                "token": jwt_token,
+                "user": {
+                    "Agent_ID": user["Agent_ID"],
+                    "Name": user["Name"],
+                    "Email_ID": user["Email_ID"],
+                    "Role": "DemoAgent",
+                    "is_demo": True
+                },
+                "session_id": session_id
+            }
+        finally:
+            conn.close()
+    finally:
+        is_demo_context.reset(d_token)
+        session_id_context.reset(s_token)
+
+
+@app.post("/api/demo/login")
+async def demo_login_legacy():
+    # Keep as alias for now but redirect to initialize
+    raise HTTPException(status_code=410, detail="Use /api/demo/initialize instead.")
+
 
 @app.post("/api/auth/customer/signup")
 @limiter.limit(RATE_LIMIT_LOGIN)
@@ -801,10 +913,6 @@ async def microsoft_callback(request: Request):
 
 
 
-@app.get("/api/auth/apple")
-async def login_apple():
-    """Redirect to Apple ID OAuth2."""
-    return RedirectResponse("https://appleid.apple.com/auth/authorize")
 
 
 @app.get("/api/auth/me")

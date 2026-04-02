@@ -14,18 +14,22 @@ import {
 } from "recharts";
 import {
   getAdminReport, addAgent, deleteAgent, assignTicket, handlePwRequest,
-  getDashboard, logout, isAuthenticated, getCurrentUser,
+  getDashboard, logout, isAuthenticated, getCurrentUser, resolveTicket
 } from "@/api";
 import { toast } from "sonner";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { useDemoMission } from "@/hooks/useDemoMission";
 
 export default function AdminDashboard() {
   const { user, authenticated, logout } = useAuth();
+  const { checklist, markComplete } = useDemoMission();
   const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("overview"); 
   const [loading, setLoading] = useState(true);
+  const isDemo = !!(user as any)?.is_demo;
   
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -80,6 +84,7 @@ export default function AdminDashboard() {
   };
 
   const handleAddAgent = async () => {
+    if (isDemo) return toast.info("Read-only mode active during demo.");
     try {
       await addAgent({ ...newAgent, ...(tempPassword ? { temp_password: tempPassword } : {}) });
       toast.success(`Added ${newAgent.name}`);
@@ -93,6 +98,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteAgent = async (agentId: number) => {
+    if (isDemo) return toast.info("Read-only mode active during demo.");
     if (!confirm("Are you sure you want to remove this agent? All assigned tickets will be unassigned.")) return;
     try {
       await deleteAgent(agentId);
@@ -104,9 +110,32 @@ export default function AdminDashboard() {
   };
 
   const handleAssign = async (ticketId: number, agentId: number | null) => {
+    if (isDemo) return toast.info("Read-only mode active during demo.");
     try {
       await assignTicket(ticketId, agentId);
       toast.success("Ticket assigned!");
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleActionPw = async (reqId: number, action: "approve" | "deny", agentName: string) => {
+    if (isDemo) return toast.info("Read-only mode active during demo.");
+    try {
+      await handlePwRequest(reqId, action);
+      toast.success(`${action === 'approve' ? 'Approved' : 'Denied'} request for ${agentName}`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleResolveTicket = async (ticketId: number) => {
+    try {
+      await resolveTicket(ticketId);
+      toast.success("Ticket resolved!");
+      if (isDemo && markComplete) markComplete("ticket_resolved");
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
@@ -163,11 +192,28 @@ export default function AdminDashboard() {
             {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
           <div className="flex items-center gap-2 flex-1 md:flex-none">
-            <span className="text-xl font-black text-primary neon-glow tracking-tighter">NEXORA <span className="text-muted-foreground opacity-50 font-normal">| ADMIN PORTAL</span></span>
+            {isDemo ? (
+              <span className="text-xl font-black text-primary neon-glow tracking-tighter">NEXORA <span className="text-muted-foreground opacity-50 font-light">| DEMO</span></span>
+            ) : (
+              <span className="text-xl font-black text-primary neon-glow tracking-tighter">NEXORA <span className="text-muted-foreground opacity-50 font-normal">| ADMIN PORTAL</span></span>
+            )}
+            
+            {isDemo && (
+              <span className="ml-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.2em] bg-primary/10 border border-primary/30 text-primary animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                Live Sandbox Session
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
+            {isDemo && (
+              <div className="hidden sm:flex flex-col items-end mr-4">
+                <span className="text-xs font-bold text-foreground uppercase">{user?.Name}</span>
+                <span className="text-[9px] text-muted-foreground uppercase tracking-widest">Demo Recruiter</span>
+              </div>
+            )}
             <button onClick={logout} className="flex items-center gap-2 p-2 px-4 bg-red-500/10 border border-red-500/20 rounded-md hover:bg-red-500/20 transition-all">
-              <span className="text-[10px] font-black text-red-400">TERMINATE SESSION</span>
+              <span className="text-[10px] font-black text-red-400">{isDemo ? "EXIT DEMO" : "TERMINATE SESSION"}</span>
               <LogOut className="w-4 h-4 text-red-400" />
             </button>
           </div>
@@ -184,27 +230,57 @@ export default function AdminDashboard() {
               { id: "analytics", label: "Operational Intel", icon: BarChart3 },
               { id: "agents", label: "Team Management", icon: Users },
               { id: "approvals", label: "Approvals", icon: ShieldCheck },
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  activeTab === item.id 
-                    ? "bg-primary/20 text-primary border border-primary/30 shadow-[0_0_15px_rgba(0,229,255,0.1)]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                }`}
-              >
-                <item.icon className="w-4 h-4" />
-                <span className="font-bold text-[11px] uppercase tracking-widest leading-none">{item.label}</span>
-              </button>
-            ))}
+            ].map(item => {
+              const highlight = isDemo && (
+                (item.id === "assign" && checklist?.ticket_resolved && !checklist?.assign_visited) ||
+                (item.id === "analytics" && checklist?.assign_visited && !checklist?.analytics_visited) ||
+                (item.id === "agents" && checklist?.analytics_visited && !checklist?.admin_visited)
+              );
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    if (isDemo && item.id === "assign") markComplete("assign_visited");
+                    if (isDemo && item.id === "analytics") markComplete("analytics_visited");
+                    if (isDemo && item.id === "agents") markComplete("admin_visited");
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all border border-transparent",
+                    activeTab === item.id 
+                      ? "bg-primary/20 text-primary border-primary/30 shadow-[0_0_15px_rgba(0,229,255,0.1)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5",
+                    highlight && "mission-pulse border-primary text-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className="w-4 h-4" />
+                    <span className="font-bold text-[11px] uppercase tracking-widest leading-none">{item.label}</span>
+                  </div>
+                  {highlight && <span className="w-2 h-2 rounded-full bg-primary animate-ping" />}
+                </button>
+              );
+            })}
           </nav>
           
           <div className="p-4 border-t border-white/10 mt-4">
             <Link href="/sql-console">
-              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-white hover:bg-[#00e5ff]/10 border border-white/5 hover:border-[#00e5ff]/30 transition-all bg-black/20 shadow-lg">
-                <Database className="w-4 h-4 text-[#00e5ff]" />
-                <span className="font-bold text-[11px] uppercase tracking-widest leading-none text-[#00e5ff]">SQL Console</span>
+              <button 
+                 className={cn(
+                   "w-full flex items-center justify-between px-4 py-3 rounded-lg border transition-all",
+                   "bg-black/20 shadow-lg",
+                   isDemo && checklist?.admin_visited && !checklist?.sql_visited 
+                     ? "border-primary text-primary hover:bg-primary/10 shadow-[0_0_15px_rgba(0,229,255,0.4)] mission-pulse" 
+                     : "border-white/5 text-muted-foreground hover:text-white hover:bg-[#00e5ff]/10 hover:border-[#00e5ff]/30"
+                 )}
+              >
+                <div className="flex items-center gap-3">
+                  <Database className={cn("w-4 h-4", isDemo && checklist?.admin_visited && !checklist?.sql_visited ? "text-primary" : "text-[#00e5ff]")} />
+                  <span className={cn("font-bold text-[11px] uppercase tracking-widest leading-none", isDemo && checklist?.admin_visited && !checklist?.sql_visited ? "text-primary" : "text-[#00e5ff]")}>SQL Console</span>
+                </div>
+                {isDemo && checklist?.admin_visited && !checklist?.sql_visited && (
+                  <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                )}
               </button>
             </Link>
           </div>
@@ -269,12 +345,21 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/10">
-                      {filteredTickets.map((ticket: any) => (
-                        <tr key={ticket.Ticket_ID} className="hover:bg-primary/5 transition-all group">
+                      {filteredTickets.map((ticket: any, index: number) => {
+                        const isMissionTarget = isDemo && !checklist?.ticket_opened && index === 0;
+                        return (
+                        <tr key={ticket.Ticket_ID} className={cn("hover:bg-primary/5 transition-all group", isMissionTarget && "bg-primary/5 mission-pulse")}>
                           <td className="px-6 py-4">
                             <span className="text-xs font-mono font-bold text-primary">#{String(ticket.Ticket_ID).padStart(4, '0')}</span>
                           </td>
-                          <td className="px-6 py-4 text-sm font-semibold">{ticket.Subject}</td>
+                          <td className="px-6 py-4 text-sm font-semibold">
+                            <div className="flex items-center gap-2">
+                               {ticket.Subject}
+                               {isMissionTarget && (
+                                  <span className="px-2 py-0.5 rounded bg-primary text-black text-[9px] font-black uppercase tracking-tighter">Mission Goal</span>
+                               )}
+                            </div>
+                          </td>
                           <td className="px-6 py-4">
                              <span className={`text-[10px] font-bold px-2 py-1 rounded-sm border ${
                                ticket.Priority === 'High' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
@@ -290,28 +375,52 @@ export default function AdminDashboard() {
                            <td className="px-6 py-4 text-right">
                              <div className="flex items-center justify-end gap-2">
                                <Link href={`/conversation/${ticket.Ticket_ID}`}>
-                                 <button className="px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary text-[10px] font-black hover:bg-primary/20 transition-all">
-                                   OPEN CHAT
-                                 </button>
+                                  <button className={cn(
+                                    "px-3 py-1.5 border text-[10px] font-black transition-all rounded uppercase whitespace-nowrap",
+                                    isMissionTarget
+                                      ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90 animate-[pulse_2s_ease-in-out_infinite] shadow-[0_0_15px_rgba(0,229,255,0.4)]"
+                                      : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                                  )}>
+                                     {isDemo ? "ENGAGE CHAT" : "OPEN CHAT"}
+                                  </button>
                                </Link>
-                               <Select
-                                 value={ticket.Agent_ID ? String(ticket.Agent_ID) : "unassigned"}
-                                 onValueChange={(v) => handleAssign(ticket.Ticket_ID, v === "unassigned" ? null : parseInt(v))}
-                               >
-                                 <SelectTrigger className="bg-white/5 border-white/10 w-48 h-9 text-xs font-bold">
-                                   <SelectValue />
-                                 </SelectTrigger>
-                                 <SelectContent>
-                                   <SelectItem value="unassigned" className="text-red-400 font-bold">● UNASSIGNED</SelectItem>
-                                   {agentsList.map((a: any) => (
-                                     <SelectItem key={a.Agent_ID} value={String(a.Agent_ID)}>{a.Name}</SelectItem>
-                                   ))}
-                                 </SelectContent>
-                               </Select>
+                               
+                               {isDemo && (
+                                  <button 
+                                     disabled={ticket.Status === "Resolved"}
+                                     onClick={() => handleResolveTicket(ticket.Ticket_ID)}
+                                     className={cn(
+                                       "px-3 py-1.5 border text-[10px] font-black transition-all rounded uppercase",
+                                       checklist?.ticket_replied && !checklist?.ticket_resolved && index === 0 && ticket.Status !== "Resolved"
+                                         ? "bg-green-500 text-white border-green-500 hover:bg-green-600 animate-[pulse_2s_ease-in-out_infinite] shadow-[0_0_15px_rgba(34,197,94,0.4)]"
+                                         : "bg-white/5 border-white/10 text-muted-foreground hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:bg-transparent"
+                                     )}
+                                  >
+                                     Resolve
+                                  </button>
+                               )}
+
+                               {!isDemo && (
+                                 <Select
+                                   value={ticket.Agent_ID ? String(ticket.Agent_ID) : "unassigned"}
+                                   onValueChange={(v) => handleAssign(ticket.Ticket_ID, v === "unassigned" ? null : parseInt(v))}
+                                 >
+                                   <SelectTrigger className="bg-white/5 border-white/10 w-48 h-9 text-xs font-bold">
+                                     <SelectValue />
+                                   </SelectTrigger>
+                                   <SelectContent>
+                                     <SelectItem value="unassigned" className="text-red-400 font-bold">● UNASSIGNED</SelectItem>
+                                     {agentsList.map((a: any) => (
+                                       <SelectItem key={a.Agent_ID} value={String(a.Agent_ID)}>{a.Name}</SelectItem>
+                                     ))}
+                                   </SelectContent>
+                                 </Select>
+                               )}
                              </div>
                            </td>
                          </tr>
-                      ))}
+                       );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -680,21 +789,13 @@ export default function AdminDashboard() {
                               {(!req.Status || req.Status === "Pending") && (
                                 <div className="flex items-center justify-end gap-2">
                                   <button
-                                    onClick={() =>
-                                      handlePwRequest(req.Request_ID, "approve")
-                                        .then(() => { toast.success(`Approved request for ${req.Name}`); fetchData(); })
-                                        .catch((e: any) => toast.error(e.message))
-                                    }
+                                    onClick={() => handleActionPw(req.Request_ID, "approve", req.Name)}
                                     className="px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-black hover:bg-green-500/20 transition-all"
                                   >
                                     APPROVE
                                   </button>
                                   <button
-                                    onClick={() =>
-                                      handlePwRequest(req.Request_ID, "deny")
-                                        .then(() => { toast.success(`Denied request for ${req.Name}`); fetchData(); })
-                                        .catch((e: any) => toast.error(e.message))
-                                    }
+                                    onClick={() => handleActionPw(req.Request_ID, "deny", req.Name)}
                                     className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black hover:bg-red-500/20 transition-all"
                                   >
                                     DENY

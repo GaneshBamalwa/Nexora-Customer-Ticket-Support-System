@@ -16,13 +16,14 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 8  # tokens live for one shift
 
 
-def create_token(user: Dict[str, Any]) -> str:
+def create_token(user: Dict[str, Any], is_demo: bool = False) -> str:
     """Mint a JWT carrying non-sensitive identity."""
     payload = {
         "Agent_ID": user.get("Agent_ID") or user.get("ID"),
         "Name":      user["Name"],
         "Email_ID":  user["Email_ID"],
         "Role":      user["Role"],
+        "is_demo":   is_demo,
         "exp":       datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
         "iat":       datetime.now(timezone.utc),
     }
@@ -60,8 +61,9 @@ def get_current_user(request: Request) -> Dict[str, Any]:
 
 
 def require_admin(user: Dict[str, Any]):
-    """Guard: raises 403 if the user is not an Administrator."""
-    if user.get("Role") != "Administrator":
+    """Guard: raises 403 if the user is not an Administrator or DemoAgent."""
+    role = user.get("Role")
+    if role not in ("Administrator", "DemoAgent"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrator access required.",

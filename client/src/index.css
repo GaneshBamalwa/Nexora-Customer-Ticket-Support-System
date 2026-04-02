@@ -91,7 +91,12 @@
 @layer base {
   * {
     @apply border-border;
-    cursor: none !important;
+  }
+
+  @media (pointer: fine) {
+    * {
+      cursor: none !important;
+    }
   }
   
   body {
@@ -361,6 +366,18 @@
 .magnetic-hover {
   position: relative;
   transition: all 0.3s cubic-bezier(0.23, 1, 0.320, 1);
+}
+
+.mission-pulse {
+  animation: mission-pulse-glow 1.5s infinite;
+  box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.7);
+  border-color: rgba(0, 229, 255, 0.8) !important;
+}
+
+@keyframes mission-pulse-glow {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
 }
 
 .magnetic-hover:hover {

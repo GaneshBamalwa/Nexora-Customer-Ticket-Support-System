@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Ticket, MessageSquare, Search, ArrowRight, Menu, X, Cpu, Zap, Shield, Star, RefreshCw } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
 import { 
   customerLogin, 
@@ -11,21 +11,33 @@ import {
   raiseTicket, 
   searchHistory, 
   rateTicket, 
-  followUp 
+  followUp,
+  demoLogin
 } from "@/api";
 import { toast } from "sonner";
 import confetti from "canvas-confetti";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { useDemoMission } from "@/hooks/useDemoMission";
 
 export default function Home() {
   const { logout, user } = useAuth();
+  const { currentStep, isDemo } = useDemoMission();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"new" | "history">(() => (sessionStorage.getItem("homeActiveTab") as "new" | "history") || "new");
   const [scrollY, setScrollY] = useState(0);
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+
+  const [, setLocation] = useLocation();
+
+  const handleDemoLogin = () => {
+    // Redirect to the new dedicated demo start page
+    setLocation("/demo-start");
+  };
   const [formData, setFormData] = useState({
     email: user?.Email_ID || "",
     subject: "",
@@ -272,7 +284,7 @@ export default function Home() {
               <div className="pt-8 flex flex-col items-center gap-8 w-full max-w-xl mx-auto materialize">
                 <div className="text-sm font-bold uppercase tracking-[0.4em] text-primary/50 mb-4 px-4 py-2 bg-primary/10 rounded-full">Identify to Access Support</div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                   <a
                     href={`${import.meta.env.VITE_API_URL || ""}/api/auth/google?redirect=http://localhost:3002/`}
                     className="glass-card-enhanced p-5 flex flex-col items-center justify-center gap-3 hover:scale-110 transition-all border border-white/5 hover:border-primary/30 group"
@@ -288,17 +300,31 @@ export default function Home() {
                     <img src="https://www.microsoft.com/favicon.ico" alt="Microsoft" className="w-6 h-6 grayscale group-hover:grayscale-0 transition-all" />
                     <span className="text-[10px] font-bold tracking-[0.2em] uppercase">Microsoft</span>
                   </a>
-
-                  <a
-                    href={`${import.meta.env.VITE_API_URL || ""}/api/auth/apple`}
-                    className="glass-card-enhanced p-5 flex flex-col items-center justify-center gap-3 hover:scale-110 transition-all border border-white/5 hover:border-white/30 group"
-                  >
-                    <img src="https://www.apple.com/favicon.ico" alt="Apple" className="w-6 h-6 grayscale group-hover:grayscale-0 transition-all" />
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase">Apple ID</span>
-                  </a>
                 </div>
                 
                 <p className="text-[10px] text-muted-foreground uppercase tracking-[0.4em]">One-click secure access to your portal</p>
+
+                {/* ── RECRUITER DEMO ── */}
+                <div className="w-full mt-2 border-t border-white/5 pt-6">
+                  <button
+                    onClick={handleDemoLogin}
+                    disabled={isDemoLoading}
+                    className="w-full relative group overflow-hidden rounded-xl border border-secondary/40 bg-secondary/10 hover:bg-secondary/20 hover:border-secondary/60 transition-all duration-300 p-4 flex flex-col items-center gap-2 disabled:opacity-60"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-secondary/0 via-secondary/10 to-secondary/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                    <div className="flex items-center gap-2">
+                      {isDemoLoading ? (
+                        <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Zap className="w-4 h-4 text-secondary" />
+                      )}
+                      <span className="text-sm font-bold tracking-[0.15em] uppercase text-secondary">
+                        {isDemoLoading ? "Activating Demo..." : "Try Interactive Demo"}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground tracking-widest uppercase">Preloaded data enabled for demonstration</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="pt-8 flex justify-center animate-bounce-slow">
@@ -490,7 +516,10 @@ export default function Home() {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="btn-primary w-full py-4 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,229,255,0.2)] disabled:opacity-50"
+                      className={cn(
+                        "btn-primary w-full py-4 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,229,255,0.2)] disabled:opacity-50",
+                        isDemo && currentStep === 'start' && "mission-pulse"
+                      )}
                     >
                       {isSubmitting ? (
                         <>
