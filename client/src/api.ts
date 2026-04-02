@@ -48,7 +48,7 @@ async function request<T = any>(
 
   if (response.status === 401) {
     clearToken();
-    window.location.href = "/staff-login";
+    window.location.href = "/";
     throw new Error("Session expired");
   }
 
@@ -112,6 +112,30 @@ export async function followUp(ticketId: number) {
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
+export async function customerSignUp(userData: any) {
+  const data = await request("/auth/customer/signup", {
+    method: "POST",
+    body: JSON.stringify(userData),
+  });
+  if (data.token) {
+    setToken(data.token);
+    setStoredUser(data.user);
+  }
+  return data;
+}
+
+export async function customerLogin(credentials: any) {
+  const data = await request("/auth/customer/login", {
+    method: "POST",
+    body: JSON.stringify(credentials),
+  });
+  if (data.token) {
+    setToken(data.token);
+    setStoredUser(data.user);
+  }
+  return data;
+}
+
 export async function login(email: string, password: string) {
   const data = await request("/auth/login", {
     method: "POST",
@@ -126,6 +150,20 @@ export async function login(email: string, password: string) {
 
 export async function getMe() {
   return request("/auth/me");
+}
+
+export async function loginWithToken(token: string) {
+  setToken(token);
+  try {
+    const data = await getMe();
+    if (data.user) {
+      setStoredUser(data.user);
+    }
+    return data.user;
+  } catch (e) {
+    clearToken();
+    throw e;
+  }
 }
 
 export function logout() {

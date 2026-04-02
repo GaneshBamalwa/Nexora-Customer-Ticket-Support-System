@@ -25,11 +25,14 @@ import json
 from dotenv import load_dotenv
 
 load_dotenv()  # must come before any os.environ reads in other modules
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+from authlib.integrations.starlette_client import OAuth
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -38,13 +41,24 @@ from slowapi.errors import RateLimitExceeded
 import bcrypt
 from openai import OpenAI
 
+# ─── PACKAGE SHIM ───────────────────────────────────────────────────────────
+# Allows running the server as a script directly (python main.py)
+# while still using relative imports for internal modules.
+if __name__ == "__main__" and not __package__:
+    import sys
+    from pathlib import Path
+    # Add project root to sys.path
+    path = Path(__file__).resolve()
+    sys.path.append(str(path.parent.parent))
+    __package__ = path.parent.name
+
 from .db import (
     get_db_conn, execute_query, fetch_one, fetch_all,
     process_row, init_db, IS_MYSQL, PH, _verify_pw
 )
 from .auth import (
     create_token, get_current_user, require_admin,
-    require_owner_or_admin,
+    require_owner_or_admin, verify_ms_token,
 )
 
 # ─── APP INIT ────────────────────────────────────────────────────────────────
@@ -59,6 +73,27 @@ app = FastAPI(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 
+
+# OAuth config
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+oauth.register(
+    name='microsoft',
+    client_id=os.environ.get("MICROSOFT_CLIENT_ID"),
+    client_secret=os.environ.get("MICROSOFT_CLIENT_SECRET"),
+    server_metadata_url='https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid profile email'},
+    claims_options={
+        'iss': {'validate': None}
+    }
+)
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
@@ -109,6 +144,17 @@ async def background_auto_assign():
             logging.error(f"Auto-assign task error: {e}")
         await asyncio.sleep(60 * 5)
 
+@app.get("/api/auth/logout")
+async def logout_route(request: Request):
+    """Clear session/cookies and redirect to login."""
+    response = RedirectResponse(url="http://localhost:3002/")
+    # If we used HTTP-only cookies, we would clear them here:
+    # response.delete_cookie("token")
+    
+    # Clear Authlib session
+    request.session.clear()
+    return response
+
 @app.get("/")
 async def root():
     """Root health check for deployment platforms like Railway."""
@@ -143,7 +189,7 @@ cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGIN", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_credentials=False, # Set to False since we use 'Authorization' header instead of cookies
+    allow_credentials=True, # Enabled to allow Authlib session cookies for CSRF/State
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -158,6 +204,15 @@ else:
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=ALLOWED_HOSTS,
+)
+
+# Authlib (sessions for OAuth state)
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=os.environ.get("SESSION_SECRET", "stable-secret-key-123"),
+    max_age=3600, # 1 hour
+    same_site="lax",
+    https_only=False # Set to True in production with SSL
 )
 
 ENFORCE_HTTPS = False  # Disabled for easier testing and flexible deployment
@@ -204,6 +259,12 @@ class TicketCreate(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1, max_length=128)
+
+
+class CustomerSignupRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
 
 
 class SearchHistoryRequest(BaseModel):
@@ -473,6 +534,77 @@ async def follow_up(request: Request, ticket_id: int):
 #  AUTH ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@app.post("/api/auth/customer/signup")
+@limiter.limit(RATE_LIMIT_LOGIN)
+async def customer_signup(request: Request, body: CustomerSignupRequest):
+    """Manual signup for customers."""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        # Check if customer already exists
+        execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (body.email,))
+        if fetch_one(cursor):
+            raise HTTPException(400, "An account with this email already exists.")
+        
+        # Check if email is a staff email (block)
+        execute_query(cursor, f"SELECT * FROM Support_Agents WHERE Email_ID = {PH}", (body.email,))
+        if fetch_one(cursor):
+            raise HTTPException(400, "This email is reserved for staff. Please use the Staff Command Center.")
+
+        # Hash and create
+        hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        execute_query(cursor, 
+            f"INSERT INTO Customers (Name, Email_ID, Password, Auth_Provider) "
+            f"VALUES ({PH}, {PH}, {PH}, 'Manual')", 
+            (body.name, body.email, hashed))
+        
+        if not IS_MYSQL:
+            conn.commit()
+            
+        # Get the new ID
+        execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (body.email,))
+        new_customer = fetch_one(cursor)
+        
+        # Issue token
+        payload = {
+            "ID": new_customer["Customer_ID"],
+            "Name": new_customer["Name"],
+            "Email_ID": new_customer["Email_ID"],
+            "Role": "Customer"
+        }
+        token = create_token(payload)
+        return {"token": token, "user": payload}
+    finally:
+        conn.close()
+
+@app.post("/api/auth/customer/login")
+@limiter.limit(RATE_LIMIT_LOGIN)
+async def customer_login(request: Request, body: LoginRequest):
+    """Manual login for customers."""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (body.email,))
+        customer = fetch_one(cursor)
+        
+        if not customer or not customer.get("Password"):
+            raise HTTPException(401, "Invalid email or password.")
+            
+        if not bcrypt.checkpw(body.password.encode(), customer["Password"].encode()):
+            raise HTTPException(401, "Invalid email or password.")
+            
+        # Issue token
+        payload = {
+            "ID": customer["Customer_ID"],
+            "Name": customer["Name"],
+            "Email_ID": customer["Email_ID"],
+            "Role": "Customer"
+        }
+        token = create_token(payload)
+        return {"token": token, "user": payload}
+    finally:
+        conn.close()
+
 @app.post("/api/auth/login")
 @limiter.limit(RATE_LIMIT_LOGIN)
 async def login(request: Request, body: LoginRequest):
@@ -513,6 +645,168 @@ async def login(request: Request, body: LoginRequest):
         conn.close()
 
 
+@app.get("/api/auth/google")
+async def login_google(request: Request):
+    """Initiate Google OAuth2 flow."""
+    redirect_uri = os.environ.get("GOOGLE_CALLBACK_URL")
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/api/auth/google/callback")
+async def google_callback(request: Request):
+    """Handle Google OAuth2 callback (Debug-Ready)."""
+    try:
+        logging.info("RECEIVED GOOGLE CALLBACK")
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get('userinfo')
+        
+        # Fallback for user info
+        if not user_info:
+            user_info = await oauth.google.get('https://openidconnect.googleapis.com/v1/userinfo', token=token).json()
+            
+        logging.info(f"GOOGLE TOKEN CLAIMS: {user_info}")
+            
+        email = user_info.get('email')
+        name = user_info.get('name') or email.split('@')[0]
+        
+        if not email:
+            logging.error("GOOGLE AUTH ERROR: No email returned")
+            return RedirectResponse("http://localhost:3002/login?error=google_no_email")
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        try:
+            # 1. Block Staff from using Google (must use manual login per USER_REQUEST)
+            execute_query(cursor, f"SELECT * FROM Support_Agents WHERE Email_ID = {PH}", (email,))
+            staff_user = fetch_one(cursor)
+            
+            if staff_user:
+                # Staff are NOT allowed to use Google per instructions
+                return RedirectResponse("http://localhost:3002/?error=staff_must_use_manual")
+
+            # 2. Check/Create Customer
+            execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
+            customer_user = fetch_one(cursor)
+            
+            if not customer_user:
+                execute_query(cursor, 
+                    f"INSERT INTO Customers (Name, Email_ID) VALUES ({PH}, {PH})", 
+                    (name, email))
+                if not IS_MYSQL:
+                    conn.commit()
+                execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
+                customer_user = fetch_one(cursor)
+            
+            # 3. Create a JWT specifically for the Customer
+            # Note: We use a simplified payload for customers
+            customer_payload = {
+                "ID": customer_user["Customer_ID"],
+                "Name": customer_user["Name"],
+                "Email_ID": customer_user["Email_ID"],
+                "Role": "Customer"
+            }
+            jwt_token = create_token(customer_payload)
+            
+            logging.info(f"LOGIN SUCCESSFUL FOR CUSTOMER {customer_user['Customer_ID']}")
+            # Redirect directly to customer portal
+            return RedirectResponse(url=f"http://localhost:3002/portal?token={jwt_token}")
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        logging.error(f"GOOGLE AUTH FAILURE: {str(e)}", exc_info=True)
+        return RedirectResponse("http://localhost:3002/login?error=google_auth_failed")
+
+
+@app.get("/api/auth/microsoft")
+async def login_microsoft(request: Request):
+    """Initiate Microsoft OAuth2 flow."""
+    redirect_uri = os.environ.get("MICROSOFT_REDIRECT_URI")
+    if not redirect_uri:
+        raise HTTPException(500, "MICROSOFT_REDIRECT_URI not configured")
+    return await oauth.microsoft.authorize_redirect(request, redirect_uri)
+
+
+@app.get("/api/auth/microsoft/callback")
+async def microsoft_callback(request: Request):
+    """Handle Microsoft OAuth2 callback (Debug-Ready)."""
+    try:
+        logging.info("RECEIVED MICROSOFT CALLBACK")
+        # 1. Exchange authorization code for tokens
+        # We pass claims_options HERE to overrule strict issuer checks in Authlib 1.3
+        token = await oauth.microsoft.authorize_access_token(
+            request, 
+            claims_options={'iss': {'validate': None}}
+        )
+        id_token = token.get('id_token')
+        
+        logging.info("EXCHANGED CODE FOR TOKENS SUCCESSFULLY")
+        
+        # 2. Manual secure ID Token verification with custom debug logging
+        user_info = await verify_ms_token(id_token)
+        
+        email = user_info.get("email")
+        name = user_info.get("name")
+        
+        logging.info(f"USER IDENTIFIED: {email} ({name})")
+        
+        if not email:
+            logging.error("OAUTH ERROR: No email returned in user_info")
+            return RedirectResponse("http://localhost:3002/?error=ms_no_email")
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        try:
+            # 1. Block Staff from using Microsoft (same policy as Google)
+            execute_query(cursor, f"SELECT * FROM Support_Agents WHERE Email_ID = {PH}", (email,))
+            staff_user = fetch_one(cursor)
+            
+            if staff_user:
+                return RedirectResponse("http://localhost:3002/?error=staff_must_use_manual")
+
+            # 2. Check/Create Customer
+            execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
+            customer_user = fetch_one(cursor)
+            
+            if not customer_user:
+                logging.info(f"CREATING NEW CUSTOMER: {email}")
+                execute_query(cursor, 
+                    f"INSERT INTO Customers (Name, Email_ID, Auth_Provider) VALUES ({PH}, {PH}, 'Microsoft')", 
+                    (name, email))
+                if not IS_MYSQL:
+                    conn.commit()
+                execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
+                customer_user = fetch_one(cursor)
+            
+            # 3. Create a JWT for the Customer
+            customer_payload = {
+                "ID": customer_user["Customer_ID"],
+                "Name": customer_user["Name"],
+                "Email_ID": customer_user["Email_ID"],
+                "Role": "Customer"
+            }
+            jwt_token = create_token(customer_payload)
+            
+            # Redirect directly to customer portal
+            return RedirectResponse(url=f"http://localhost:3002/portal?token={jwt_token}")
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        logging.error(f"MICROSOFT CALLBACK FAILURE: {str(e)}", exc_info=True)
+        return RedirectResponse("http://localhost:3002/login?error=ms_auth_failed")
+
+
+
+
+@app.get("/api/auth/apple")
+async def login_apple():
+    """Redirect to Apple ID OAuth2."""
+    return RedirectResponse("https://appleid.apple.com/auth/authorize")
+
+
 @app.get("/api/auth/me")
 async def me(request: Request):
     """Return the current user's identity from the JWT."""
@@ -544,9 +838,9 @@ async def dashboard(request: Request,
         params = []
 
         # IDOR: agents only see their tickets + unassigned
-        if user["role"] != "Administrator":
+        if user["Role"] != "Administrator":
             query += " AND (Agent_ID = %s OR Agent_ID IS NULL)"
-            params.append(user["agent_id"])
+            params.append(user["Agent_ID"])
 
         if status_filter:
             query += " AND Status = %s"
@@ -572,16 +866,16 @@ async def dashboard(request: Request,
             "SUM(CASE WHEN Status='Open' THEN 1 ELSE 0 END) as open_count, "
             "SUM(CASE WHEN Status='Resolved' THEN 1 ELSE 0 END) as resolved "
             "FROM Tickets WHERE 1=1"
-            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["role"] != "Administrator" else ""),
-            (user["agent_id"],) if user["role"] != "Administrator" else ()
+            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["Role"] != "Administrator" else ""),
+            (user["Agent_ID"],) if user["Role"] != "Administrator" else ()
         )
         stats = fetch_one(cursor) or {}
 
         execute_query(cursor,
             "SELECT Created_Date, Resolved_At FROM Tickets WHERE Status='Resolved' "
             "AND Resolved_At IS NOT NULL AND Created_Date IS NOT NULL"
-            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["role"] != "Administrator" else ""),
-            (user["agent_id"],) if user["role"] != "Administrator" else ()
+            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["Role"] != "Administrator" else ""),
+            (user["Agent_ID"],) if user["Role"] != "Administrator" else ()
         )
         resolved_tickets = [process_row(r) for r in fetch_all(cursor)]
         total_hours, valid_tkts = 0, 0
@@ -801,8 +1095,8 @@ async def assign_ticket(request: Request, ticket_id: int, body: AssignTicketRequ
             raise HTTPException(404, "Ticket not found")
 
         # Security check: Admin OR currently assigned agent
-        is_admin = user["role"] == "Administrator"
-        is_owner = ticket["Agent_ID"] == user["agent_id"]
+        is_admin = user["Role"] == "Administrator"
+        is_owner = ticket["Agent_ID"] == user["Agent_ID"]
         if not (is_admin or is_owner):
             raise HTTPException(403, "Not authorized to reassign this ticket")
 
@@ -830,7 +1124,7 @@ async def delete_agent(request: Request, agent_id: int):
     user = get_current_user(request)
     require_admin(user)
     
-    if agent_id == user["agent_id"]:
+    if agent_id == user["Agent_ID"]:
         raise HTTPException(400, "You cannot delete yourself.")
 
     conn = get_db_conn()
@@ -925,7 +1219,7 @@ async def get_sql_metadata(request: Request):
 async def run_sql_query(request: Request, body: SqlQueryRequest):
     """Execute raw SQL query with role-based restrictions."""
     user = get_current_user(request)
-    role = user.get("role", "Agent")
+    role = user.get("Role", "Agent")
     
     query = body.query.strip()
     upper_q = query.upper()
@@ -941,7 +1235,7 @@ async def run_sql_query(request: Request, body: SqlQueryRequest):
     if upper_q.startswith("SELECT") and "LIMIT" not in upper_q:
         query += " LIMIT 100"
         
-    logging.info(f"User {user.get('email')} ({role}) executing SQL: {query}")
+    logging.info(f"User {user.get('Email_ID')} ({role}) executing SQL: {query}")
         
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -984,15 +1278,15 @@ async def password_status(request: Request):
     try:
         execute_query(cursor,
             f"SELECT Password FROM Support_Agents WHERE Agent_ID = {PH}",
-            (user["agent_id"],))
+            (user["Agent_ID"],))
         row = fetch_one(cursor)
 
         approved = True
-        if user["role"] == "Agent" and row and row["Password"]:
+        if user["Role"] == "Agent" and row and row["Password"]:
             execute_query(cursor,
                 f"SELECT * FROM Password_Change_Requests "
                 f"WHERE Agent_ID = {PH} AND Status = 'Approved'",
-                (user["agent_id"],))
+                (user["Agent_ID"],))
             approved = bool(cursor.fetchone())
 
         return {
@@ -1020,13 +1314,13 @@ async def set_password(request: Request, body: SetPasswordRequest):
         execute_query(cursor,
             f"UPDATE Support_Agents SET Password = {PH}, Is_Temp_Password = {PH} "
             f"WHERE Agent_ID = {PH}",
-            (hashed, False, user["agent_id"]))
+            (hashed, False, user["Agent_ID"]))
 
-        if user["role"] == "Agent":
+        if user["Role"] == "Agent":
             execute_query(cursor,
                 f"UPDATE Password_Change_Requests SET Status = 'Done' "
                 f"WHERE Agent_ID = {PH} AND Status = 'Approved'",
-                (user["agent_id"],))
+                (user["Agent_ID"],))
 
         if not IS_MYSQL:
             conn.commit()
@@ -1046,7 +1340,7 @@ async def request_password_change(request: Request):
         execute_query(cursor,
             f"INSERT INTO Password_Change_Requests (Agent_ID, Status) "
             f"VALUES ({PH}, 'Pending')",
-            (user["agent_id"],))
+            (user["Agent_ID"],))
         if not IS_MYSQL:
             conn.commit()
         return {"message": "Request sent to admin."}

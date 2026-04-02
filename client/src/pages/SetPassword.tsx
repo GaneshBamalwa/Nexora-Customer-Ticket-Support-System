@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Lock, Eye, EyeOff, Zap, ShieldCheck } from "lucide-react";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
-import { getPasswordStatus, setPassword, isAuthenticated, getCurrentUser } from "@/api";
+import { getPasswordStatus, setPassword } from "@/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export default function SetPassword() {
+  const { user, authenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [password, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -17,24 +19,23 @@ export default function SetPassword() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setLocation("/staff-login");
+    if (!authenticated) {
+      setLocation("/");
       return;
     }
     // Check password status — if no action needed, redirect away
     getPasswordStatus()
       .then((status: any) => {
         if (status.has_password && !status.change_approved) {
-          const user = getCurrentUser();
-          const role = user?.Role || user?.role;
-          setLocation(role === "Administrator" ? "/admin-dashboard" : "/agent-dashboard");
+          const role = (user?.Role || user?.role || "").toLowerCase();
+          setLocation(role === "administrator" ? "/admin-dashboard" : "/agent-dashboard");
         }
       })
       .catch(() => {
         // If status check fails just let the user proceed
       })
       .finally(() => setIsChecking(false));
-  }, []);
+  }, [authenticated, user, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,9 +50,8 @@ export default function SetPassword() {
     try {
       await setPassword(password, confirm);
       toast.success("Password set successfully!");
-      const user = getCurrentUser();
-      const role = user?.Role || user?.role;
-      setLocation(role === "Administrator" ? "/admin-dashboard" : "/agent-dashboard");
+      const role = (user?.Role || user?.role || "").toLowerCase();
+      setLocation(role === "administrator" ? "/admin-dashboard" : "/agent-dashboard");
     } catch (err: any) {
       setError(err.message || "Failed to set password.");
     } finally {

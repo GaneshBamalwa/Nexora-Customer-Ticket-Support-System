@@ -10,9 +10,12 @@ import {
 import { getDashboard, resolveTicket, assignTicket, logout, isAuthenticated, getCurrentUser, requestPasswordChange } from "@/api";
 import { toast } from "sonner";
 
+import { useAuth } from "@/contexts/AuthContext";
+
 type Section = "dashboard" | "my-tickets" | "active-tickets";
 
 export default function AgentDashboard() {
+  const { user, authenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("dashboard");
@@ -24,24 +27,20 @@ export default function AgentDashboard() {
   const [tickets, setTickets] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, open: 0, resolved: 0 });
   const [agents, setAgents] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pwRequestLoading, setPwRequestLoading] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setLocation("/staff-login");
-      return;
+    // ProtectedRoute handles the main auth and role check.
+    // We just fetch data here.
+    if (authenticated) {
+      fetchDashboard();
+      const interval = setInterval(() => {
+        fetchDashboard(true);
+      }, 10000);
+      return () => clearInterval(interval);
     }
-    const current = getCurrentUser();
-    setUser(current);
-    fetchDashboard();
-    
-    const interval = setInterval(() => {
-      fetchDashboard(true);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [authenticated]);
 
   const fetchDashboard = async (silent = false) => {
     if (!silent) setLoading(true);

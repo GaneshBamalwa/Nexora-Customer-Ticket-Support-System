@@ -18,7 +18,10 @@ import {
 } from "@/api";
 import { toast } from "sonner";
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export default function AdminDashboard() {
+  const { user, authenticated, logout } = useAuth();
   const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("overview"); 
@@ -44,22 +47,16 @@ export default function AdminDashboard() {
   const [showTempPw, setShowTempPw] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setLocation("/staff-login");
-      return;
+    // ProtectedRoute handles the main auth and role check.
+    // We just fetch data here.
+    if (authenticated) {
+      fetchData();
+      const interval = setInterval(() => {
+        fetchData(true);
+      }, 10000);
+      return () => clearInterval(interval);
     }
-    const user = getCurrentUser();
-    if (user && user.Role !== "Administrator" && user.role !== "Administrator") {
-      setLocation("/agent-dashboard");
-      return;
-    }
-    fetchData();
-
-    const interval = setInterval(() => {
-      fetchData(true);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [authenticated]);
 
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);

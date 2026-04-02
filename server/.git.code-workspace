@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "../.git"
+		},
+		{
+			"path": "../client"
+		},
+		{
+			"path": "../screenshots"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../templates"
+		}
+	]
+}

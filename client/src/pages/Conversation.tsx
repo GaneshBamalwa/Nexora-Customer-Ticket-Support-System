@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { ArrowLeft, Send, MessageSquare, User, Cpu } from "lucide-react";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
-import { getConversation, postConversation, isAuthenticated, aiSuggest } from "@/api";
+import { getConversation, postConversation, aiSuggest } from "@/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export default function Conversation() {
+  const { authenticated, user } = useAuth();
   const params = useParams<{ ticketId: string }>();
   const ticketId = parseInt(params.ticketId || "0");
   const [ticket, setTicket] = useState<any>(null);
@@ -26,7 +28,7 @@ export default function Conversation() {
   const fetchConversation = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const email = !isAuthenticated() ? sessionStorage.getItem("trackingEmail") || "" : undefined;
+      const email = !authenticated ? sessionStorage.getItem("trackingEmail") || "" : undefined;
       const data = await getConversation(ticketId, email);
       setTicket(data.ticket);
       setMessages(data.messages || []);
@@ -41,7 +43,7 @@ export default function Conversation() {
     if (!newMessage.trim()) return;
     setSending(true);
     try {
-      const email = !isAuthenticated() ? sessionStorage.getItem("trackingEmail") || "" : undefined;
+      const email = !authenticated ? sessionStorage.getItem("trackingEmail") || "" : undefined;
       await postConversation(ticketId, newMessage, email);
       setNewMessage("");
       fetchConversation(true);
@@ -77,7 +79,7 @@ export default function Conversation() {
   };
 
   const [, setLocation] = useLocation();
-  const backLink = isAuthenticated() ? "/agent-dashboard" : "/";
+  const backLink = authenticated ? "/agent-dashboard" : "/portal";
   
   const handleBack = () => {
     if (window.history.length > 2) {
@@ -144,8 +146,7 @@ export default function Conversation() {
             </div>
           ) : (
             messages.map((msg: any, idx: number) => {
-              const isStaff = isAuthenticated();
-              const isMe = isStaff ? msg.Sender_Role !== "Customer" : msg.Sender_Role === "Customer";
+              const isMe = authenticated ? msg.Sender_Role !== "Customer" : msg.Sender_Role === "Customer";
               
               return (
                 <div
@@ -205,7 +206,7 @@ export default function Conversation() {
                 rows={1}
                 className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-all resize-none shadow-inner"
               />
-              {isAuthenticated() && (
+              {authenticated && user && user.Role !== "Customer" && (
                 <button
                   onClick={handleAI}
                   disabled={aiLoading || sending}

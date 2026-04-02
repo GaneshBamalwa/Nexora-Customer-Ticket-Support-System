@@ -6,9 +6,10 @@ import * as THREE from 'three'
 interface EnergyOrbProps {
   mouse: React.MutableRefObject<[number, number]>;
   variant: string;
+  opacity?: number;
 }
 
-function EnergyOrb({ mouse, variant }: EnergyOrbProps) {
+function EnergyOrb({ mouse, variant, opacity = 1 }: EnergyOrbProps) {
   const mesh = useRef<THREE.Mesh>(null!)
 
   useFrame((state) => {
@@ -36,7 +37,9 @@ function EnergyOrb({ mouse, variant }: EnergyOrbProps) {
           metalness={0.8}
           roughness={0.1}
           emissive={variant === 'login' ? "#7c3aed" : "#00d4ff"}
-          emissiveIntensity={0.4}
+          emissiveIntensity={0.4 * opacity}
+          transparent={opacity < 1}
+          opacity={opacity}
         />
       </Sphere>
     </Float>
@@ -101,11 +104,18 @@ function Particles({ count = 150, mouse, variant }: { count: number; mouse: Reac
 }
 
 interface ImmersiveBackgroundProps {
-  variant?: 'landing' | 'dashboard' | 'login' | 'analytics' | 'architects';
+  variant?: string;
   intensity?: 'light' | 'medium' | 'heavy';
+  showOrb?: boolean;
+  orbOpacity?: number;
 }
 
-export const ImmersiveBackground = ({ variant, intensity = 'medium', showOrb = true }: { variant: string; intensity?: 'light' | 'medium' | 'heavy'; showOrb?: boolean }) => {
+export const ImmersiveBackground = ({ 
+  variant = 'landing', 
+  intensity = 'medium', 
+  showOrb = true,
+  orbOpacity = 1
+}: ImmersiveBackgroundProps) => {
   const mouse = useRef<[number, number]>([0, 0])
   const [scrollY, setScrollY] = useState(0)
 
@@ -158,11 +168,13 @@ export const ImmersiveBackground = ({ variant, intensity = 'medium', showOrb = t
             position={[-10, 10, 15]} 
             angle={0.25} 
             penumbra={1} 
-            intensity={1.5} 
+            intensity={1.5 * orbOpacity} 
             color={variant === 'login' ? '#b537f2' : '#00e5ff'} 
         />
         
-        {showOrb && variant !== 'architects' && <EnergyOrb mouse={mouse} variant={variant} />}
+        {showOrb && variant !== 'architects' && (
+          <EnergyOrb mouse={mouse} variant={variant} opacity={orbOpacity} />
+        )}
         <Particles count={particleCount} mouse={mouse} variant={variant} />
 
         {/* Depth Fog */}

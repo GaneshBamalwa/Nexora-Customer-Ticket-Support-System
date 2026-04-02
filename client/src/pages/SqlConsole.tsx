@@ -6,8 +6,8 @@ import { okaidia } from "@uiw/codemirror-theme-okaidia";
 import {
   getSqlMetadata,
   runSqlQuery,
-  getCurrentUser,
 } from "../api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ interface TableMetadata {
 }
 
 export default function SqlConsole() {
+  const { user, authenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [metadata, setMetadata] = useState<Record<string, TableMetadata>>({});
   const [loadingSchema, setLoadingSchema] = useState(true);
@@ -45,14 +46,8 @@ export default function SqlConsole() {
   const [execTime, setExecTime] = useState<number | null>(null);
 
   useEffect(() => {
-    // Validate User
-    const user = getCurrentUser();
-    const role = user?.Role || user?.role;
-    if (!user || (role !== "Administrator" && role !== "Agent")) {
-      toast.error("Unauthorized Access");
-      setLocation("/staff-login");
-      return;
-    }
+    // ProtectedRoute handles the main auth and role check.
+    if (!authenticated) return;
 
     // Load schema metadata
     getSqlMetadata()
@@ -159,8 +154,7 @@ export default function SqlConsole() {
             variant="ghost"
             className="text-slate-400 hover:text-white"
             onClick={() => {
-              const u = getCurrentUser();
-              const r = u?.Role || u?.role;
+              const r = user?.Role || user?.role;
               setLocation(r === "Administrator" ? "/admin-dashboard" : "/agent-dashboard");
             }}
           >

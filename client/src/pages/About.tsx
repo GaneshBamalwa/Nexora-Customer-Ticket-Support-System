@@ -36,7 +36,10 @@ interface ChatMessage {
   text: string;
 }
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export default function About() {
+  const { authenticated, logout } = useAuth();
   const [scrollY, setScrollY] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -107,17 +110,25 @@ export default function About() {
       {/* Navigation Header */}
       <header className="fixed top-0 w-full z-50 border-b border-white/5 bg-[#020818]/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href={authenticated ? "/portal" : "/"} className="flex items-center gap-2 group">
             <div className="p-1.5 rounded-lg border border-white/10 group-hover:border-primary/50 transition-colors">
               <ArrowLeft className="w-4 h-4 text-primary" />
             </div>
-            <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">Dashboard</span>
+            <span className="text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
+              {authenticated ? "Portal" : "Login"}
+            </span>
           </Link>
           <div className="flex items-center gap-2">
           </div>
           <div className="hidden md:flex items-center gap-6">
-            <Link href="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
-            <Link href="/staff-login" className="text-sm font-medium px-4 py-2 rounded-full border border-primary/20 hover:bg-primary/10 transition-all">Sign In</Link>
+            <Link href={authenticated ? "/portal" : "/"} className="text-sm font-medium hover:text-primary transition-colors">
+              {authenticated ? "Portal" : "Home"}
+            </Link>
+            {authenticated ? (
+              <button onClick={logout} className="text-sm font-medium px-4 py-2 rounded-full border border-red-500/20 hover:bg-red-500/10 transition-all text-red-400">Logout</button>
+            ) : (
+              <Link href="/" className="text-sm font-medium px-4 py-2 rounded-full border border-primary/20 hover:bg-primary/10 transition-all">Sign In</Link>
+            )}
           </div>
         </div>
       </header>
@@ -459,9 +470,9 @@ export default function About() {
               <span className="text-primary neon-glow">Complete Control.</span>
             </h2>
 
-            <Link href="/">
+            <Link href={authenticated ? "/portal" : "/"}>
               <button className="btn-primary text-lg px-12 py-5 rounded-full shadow-[0_0_40px_rgba(0,229,255,0.4)] hover:shadow-[0_0_60px_rgba(0,229,255,0.6)] group">
-                Go to Dashboard
+                {authenticated ? "Go to Portal" : "Login to System"}
                 <ArrowRight className="inline-block ml-2 group-hover:translate-x-2 transition-transform" />
               </button>
             </Link>

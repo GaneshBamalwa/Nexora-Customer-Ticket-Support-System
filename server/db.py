@@ -109,7 +109,8 @@ def init_db():
             "Agent_ID INT AUTO_INCREMENT PRIMARY KEY, "
             "Name VARCHAR(255), Email_ID VARCHAR(255) UNIQUE, "
             "Role VARCHAR(50), Password VARCHAR(255) NULL, "
-            "Is_Temp_Password BOOLEAN DEFAULT FALSE)"
+            "Is_Temp_Password BOOLEAN DEFAULT FALSE, "
+            "Auth_Provider VARCHAR(50) DEFAULT 'Local')"
         )
         # Migration: add column if it doesn't exist yet
         try:
@@ -118,6 +119,12 @@ def init_db():
             )
         except Exception:
             pass  # Column already exists
+        try:
+            cursor.execute(
+                "ALTER TABLE Support_Agents ADD COLUMN Auth_Provider VARCHAR(50) DEFAULT 'Local'"
+            )
+        except Exception:
+            pass # Column already exists
         cursor.execute(
             "CREATE TABLE IF NOT EXISTS Tickets ("
             "Ticket_ID INT AUTO_INCREMENT PRIMARY KEY, "
@@ -152,7 +159,8 @@ def init_db():
                 Agent_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 Name TEXT, Email_ID TEXT UNIQUE,
                 Role TEXT, Password TEXT NULL,
-                Is_Temp_Password INTEGER DEFAULT 0
+                Is_Temp_Password INTEGER DEFAULT 0,
+                Auth_Provider TEXT DEFAULT 'Local'
             );
             CREATE TABLE IF NOT EXISTS Tickets (
                 Ticket_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,6 +188,13 @@ def init_db():
         try:
             cursor.execute(
                 "ALTER TABLE Support_Agents ADD COLUMN Is_Temp_Password INTEGER DEFAULT 0"
+            )
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
+        try:
+            cursor.execute(
+                "ALTER TABLE Support_Agents ADD COLUMN Auth_Provider TEXT DEFAULT 'Local'"
             )
             conn.commit()
         except Exception:
