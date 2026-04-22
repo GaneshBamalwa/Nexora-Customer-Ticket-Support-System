@@ -1,66 +1,153 @@
-# Nexora Integrated - Customer Support Platform
+<div align="center">
 
-> Secure full-stack customer support platform combining the **Nexora Enterprise** React frontend with the **Customer Support Portal** FastAPI backend.
+# 🌌 NEXORA
+### The Future of AI-Driven Customer Support
+**Secure. Immersive. Intelligent.**
 
-## Architecture
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![MySQL](https://img.shields.io/badge/mysql-%2300f.svg?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![TailwindCSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-```
-nexora-integrated/
-├── client/          # React + Vite + TailwindCSS frontend
-│   └── src/
-│       ├── api.ts           # Centralised API client with JWT
-│       ├── pages/           # Home, StaffLogin, AgentDashboard, AdminDashboard, Conversation
-│       ├── components/      # UI components, CustomCursor, ImmersiveBackground
-│       └── ...
-├── server/          # FastAPI backend
-│   ├── main.py              # API routes with rate limiting & security
-│   ├── db.py                # Database layer (SQLite/MySQL)
-│   ├── auth.py              # JWT authentication & IDOR prevention
-│   ├── .env                 # Environment configuration
-│   └── requirements.txt
-├── UNMAPPED_FRONTEND_FEATURES.md
-├── UNMAPPED_BACKEND_FEATURES.md
-└── README.md
-```
+[![License: MIT](https://img.shields.io/badge/License-MIT-cyan.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg?style=flat-square)](#)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blueviolet.svg?style=flat-square)](#)
+[![Stars](https://img.shields.io/github/stars/GaneshBamalwa/customer_portal_integrated?style=flat-square&color=cyan)](https://github.com/GaneshBamalwa/customer_portal_integrated/stargazers)
 
-## Quick Start
+<img src="https://images.unsplash.com/photo-1531746790731-6c087fecd65a?auto=format&fit=crop&q=80&w=1200&h=400" alt="Nexora Hero Banner" width="100%" style="border-radius: 10px; margin: 20px 0;">
 
-### 1. Backend
+</div>
+
+---
+
+## ✨ Project Overview
+
+**Nexora** is a production-grade, AI-powered customer support ecosystem designed to bridge the gap between complex enterprise workflows and seamless user experiences. By combining a **high-fidelity, immersive React frontend** with a **hardened FastAPI backend**, Nexora delivers a support platform that isn't just functional—it's futuristic.
+
+### 🎯 Why Nexora?
+- **AI-First Workflow**: Automated triage and intelligent response suggestions.
+- **Immersive UX**: 3D particle systems and motion-rich interfaces that WOW users.
+- **Battle-Hardened Security**: Multi-layered defense including JWT, Bcrypt, and IDOR protection.
+- **Operational Excellence**: Real-time analytics and background automation.
+
+---
+
+## 🚀 Features
+
+### 🧠 AI Capabilities
+- **Nexora AI Chatbot**: Interactive, context-aware support bot powered by OpenAI.
+- **Smart Response Suggestions**: Real-time AI drafting for support agents to accelerate resolution.
+- **Automated Triage**: Background tasks that intelligently route and assign tickets based on priority and load.
+
+### 🛡️ Security (Zero-Trust Approach)
+- **Hardened Auth**: JWT Bearer tokens with 8-hour expiry and Bcrypt password hashing.
+- **IDOR Protection**: Strict ownership validation on every sensitive API endpoint.
+- **Threat Mitigation**: Built-in rate limiting (`slowapi`) and 100% parameterized SQL queries.
+- **Security Headers**: Custom middleware for `X-Frame-Options`, `CSP`, and `HSTS`.
+
+### 📊 Admin & Analytics
+- **Live Command Center**: Real-time dashboard for administrators to monitor global performance.
+- **SLA Tracking**: Automated due-date calculation (24h/48h/72h) based on ticket priority.
+- **Performance Metrics**: Detailed agent performance reports and customer satisfaction (CSAT) tracking.
+
+### 💎 UX & Design
+- **3D Immersive Backgrounds**: Interactive Three.js particle systems for an premium feel.
+- **Micro-Interactions**: Fluid animations powered by Framer Motion.
+- **Glassmorphic UI**: Modern, sleek design language built with Tailwind CSS 4.0.
+
+---
+
+## 🏗️ Architecture
 
 ```bash
-cd server
-python -m venv venv
-venv\Scripts\activate          # Windows
-pip install -r requirements.txt
-python main.py                 # Starts on http://localhost:5000
+nexora-integrated/
+├── client/              # React 19 + Vite + Tailwind 4.0
+│   ├── src/
+│   │   ├── api/         # Centralized Axios layer with JWT handling
+│   │   ├── components/  # Reusable UI primitives (Shadcn/UI)
+│   │   ├── hooks/       # Custom React hooks for business logic
+│   │   └── pages/       # Dashboard, SQL Console, Admin Panel
+├── server/              # FastAPI + Pydantic v2 + SQLite/MySQL
+│   ├── main.py          # API Entry point & Background Tasks
+│   ├── db.py            # Database abstraction & Parameterized Queries
+│   ├── auth.py          # JWT Security & Auth Decorators
+│   └── .env.example     # Configuration template
+├── technicalDetails.md  # Deep technical documentation
+└── features.md          # Comprehensive feature inventory
 ```
 
-### 2. Frontend
+> **Note:** Nexora uses an ORM-less database approach to maximize performance and ensure complete control over SQL execution.
 
+---
+
+## ⚙️ Tech Stack
+
+| Component | Technology |
+| :--- | :--- |
+| **Frontend** | React 19, Vite, Tailwind CSS 4.0, Framer Motion, Three.js |
+| **Backend** | FastAPI, Python 3.10+, SlowAPI (Rate Limiting) |
+| **Database** | MySQL (Production), SQLite (Development), raw SQL |
+| **Authentication** | JWT, Bcrypt Hashing |
+| **AI Integration** | OpenAI GPT-4o / llama-3.3-70b-versatile |
+
+---
+
+## 📸 Screenshots
+
+<div align="center">
+  <table style="width: 100%">
+    <tr>
+      <td width="50%"><strong>Immersive Landing Page</strong></td>
+      <td width="50%"><strong>Agent Command Center</strong></td>
+    </tr>
+    <tr>
+      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Nexora+Hero+UI" alt="Landing Page"></td>
+      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Agent+Dashboard" alt="Agent Dashboard"></td>
+    </tr>
+    <tr>
+      <td width="50%"><strong>AI Support Chat</strong></td>
+      <td width="50%"><strong>Admin Analytics</strong></td>
+    </tr>
+    <tr>
+      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=AI+Chatbot+UI" alt="AI Chatbot"></td>
+      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Admin+Report+UI" alt="Admin Report"></td>
+    </tr>
+  </table>
+</div>
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- MySQL (Optional, defaults to SQLite)
+
+### 1. Setup Backend
+```bash
+cd server
+pip install -r requirements.txt
+cp .env.example .env  # Add your OpenAI & JWT secrets
+python main.py
+```
+
+### 2. Setup Frontend
 ```bash
 cd client
 npm install
-npm run dev                    # Starts on http://localhost:3001
+npm run dev
 ```
 
-### 3. Demo Credentials
+---
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@support.com | admin1234 |
-| Agent | ganesh@support.com | ganesh123 |
-| Agent | rudransh@support.com | rudransh123 |
+## 👨‍💻 Contributors
+- **Ganesh Bamalwa** - [GitHub](https://github.com/GaneshBamalwa) | [LinkedIn](https://linkedin.com/in/ganeshbamalwa)
+- **Rudransh Kadiveti** - [GitHub](https://github.com/RudranshKadiveti)
 
-## Security Features
+---
 
-- **Bcrypt password hashing** (replaces SHA-256)
-- **JWT Bearer authentication** with 8-hour expiry
-- **IDOR prevention** – every endpoint verifies data ownership
-- **Rate limiting** – Login: 5/min, Tickets: 10/min, API: 60/min
-- **Security headers** – X-Frame-Options, CSP, HSTS, etc.
-- **HTTPS enforcement** (configurable via env)
-- **CORS locked** to frontend origin only
-- **Input validation** – Pydantic models with regex, length, and type constraints
-- **Parameterised SQL queries** – zero string interpolation
-- **Secrets in .env** – never hardcoded
-- **Password strength requirements** – min 8 chars, uppercase, lowercase, digit
+<div align="center">
+  <p>Built with 💙 for the future of customer support.</p>
+  <a href="#top">Back to top</a>
+</div>
