@@ -137,8 +137,7 @@ async def background_auto_assign():
                             f"UPDATE Tickets SET Agent_ID = {PH}, Assigned_At = CURRENT_TIMESTAMP "
                             f"WHERE Ticket_ID = {PH}",
                             (chosen, tid))
-                    if not IS_MYSQL:
-                        conn.commit()
+                    # conn.commit() # Not needed with autocommit=True in PostgreSQL
             conn.close()
         except Exception as e:
             logging.error(f"Auto-assign task error: {e}")
@@ -166,12 +165,19 @@ async def startup_event():
     """Unified startup: initialize database and start background tasks."""
     logging.info("Starting Nexora API server...")
     
-    # 1. Initialize Database
+    # 1. Initialize and Validate PostgreSQL Connection
     try:
         init_db()
-        logging.info("Database initialized successfully.")
+        # Explicit validation check
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+        conn.close()
+        logging.info("PostgreSQL connection established successfully.")
     except Exception as e:
-        logging.error(f"Database initialization failed: {e}")
+        logging.error(f"PostgreSQL connection/initialization failed: {e}")
+        # We don't exit here to allow the app to attempt recovery or show error states
     
     # 2. Start Background Tasks
     asyncio.create_task(background_auto_assign())
@@ -245,40 +251,10 @@ async def security_headers(request: Request, call_next):
 @app.middleware("http")
 async def demo_context_middleware(request: Request, call_next):
     """
-    Inspect every JWT and set is_demo_context/session_id_context for demo sessions.
-    This transparently routes ALL queries to isolated session DBs if available.
+    Placeholder middleware for demo context (PostgreSQL migration).
+    In this version, we stick to a single PostgreSQL database.
     """
-    from db import is_demo_context, session_id_context
-    from auth import JWT_SECRET, JWT_ALGORITHM
-    import jwt as pyjwt
-
-    is_demo = False
-    session_id = None
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        try:
-            payload = pyjwt.decode(
-                auth[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM],
-                options={"verify_exp": False}  # expiry checked elsewhere
-            )
-            is_demo = bool(payload.get("is_demo", False))
-            session_id = payload.get("session_id")
-        except Exception:
-            pass
-
-    demo_token = is_demo_context.set(is_demo)
-    sess_token = session_id_context.set(session_id)
-    try:
-        response = await call_next(request)
-    finally:
-        is_demo_context.reset(demo_token)
-        session_id_context.reset(sess_token)
-
-    if is_demo:
-        response.headers["X-Demo-Mode"] = "true"
-        if session_id:
-            response.headers["X-Demo-Session"] = session_id
-
+    response = await call_next(request)
     return response
 
 
@@ -414,8 +390,7 @@ async def raise_ticket(request: Request, body: TicketCreate):
             (customer_id, body.subject, body.description, body.priority))
         ticket_id = cursor.lastrowid
 
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Ticket raised successfully!", "ticket_id": ticket_id}
     finally:
         conn.close()
@@ -548,8 +523,7 @@ async def post_conversation(request: Request, ticket_id: int,
             f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) "
             f"VALUES ({PH}, {PH}, {PH})",
             (ticket_id, role, body.message))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Message sent"}
     finally:
         conn.close()
@@ -568,8 +542,7 @@ async def rate_ticket(request: Request, ticket_id: int, rating: int):
             f"UPDATE Tickets SET Rating = {PH} "
             f"WHERE Ticket_ID = {PH} AND Status = 'Resolved'",
             (rating, ticket_id))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Rating submitted"}
     finally:
         conn.close()
@@ -586,8 +559,7 @@ async def follow_up(request: Request, ticket_id: int):
             f"UPDATE Tickets SET FollowUpCount = FollowUpCount + 1, "
             f"Status = 'Open' WHERE Ticket_ID = {PH}",
             (ticket_id,))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Follow-up sent"}
     finally:
         conn.close()
@@ -601,65 +573,10 @@ async def follow_up(request: Request, ticket_id: int):
 @limiter.limit(RATE_LIMIT_LOGIN)
 async def demo_initialize(request: Request):
     """
-    Initialize a fresh demo session:
-    1. Generate unique session ID
-    2. Create isolated DB file
-    3. Seed isolated DB with starter ticket
-    4. Return restricted JWT
+    Initialize a demo session in PostgreSQL.
+    Note: Isolated session files are no longer supported in PostgreSQL mode.
     """
-    import uuid
-    from db import init_session_db, is_demo_context, session_id_context
-    
-    session_id = str(uuid.uuid4())[:12]
-    
-    # Initialize the specific DB for this session
-    init_session_db(session_id)
-    
-    # Set context so we fetch the user from the newly created DB
-    d_token = is_demo_context.set(True)
-    s_token = session_id_context.set(session_id)
-    
-    try:
-        conn = get_db_conn()
-        cursor = conn.cursor()
-        try:
-            execute_query(cursor, f"SELECT * FROM Demo_Support_Agents WHERE Email_ID = {PH}", ("demo@nexora.io",))
-            user = fetch_one(cursor)
-            
-            if not user:
-                raise HTTPException(500, "Demo user seeding failed.")
-            
-            # Create a bespoke token carrying the session_id and restricted role
-            # session_id ensures middleware routes future requests to the right DB
-            payload = {
-                "Agent_ID": user["Agent_ID"],
-                "Name": user.get("Name", "Demo Recruiter"),
-                "Email_ID": user["Email_ID"],
-                "Role": "DemoAgent", # Restricted role
-                "is_demo": True,
-                "session_id": session_id,
-                "exp": datetime.utcnow() + timedelta(hours=8)
-            }
-            import jwt as pyjwt
-            from auth import JWT_SECRET, JWT_ALGORITHM
-            jwt_token = pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-            
-            return {
-                "token": jwt_token,
-                "user": {
-                    "Agent_ID": user["Agent_ID"],
-                    "Name": user["Name"],
-                    "Email_ID": user["Email_ID"],
-                    "Role": "DemoAgent",
-                    "is_demo": True
-                },
-                "session_id": session_id
-            }
-        finally:
-            conn.close()
-    finally:
-        is_demo_context.reset(d_token)
-        session_id_context.reset(s_token)
+    raise HTTPException(status_code=501, detail="Demo session isolation is not supported in PostgreSQL mode yet.")
 
 
 @app.post("/api/demo/login")
@@ -692,8 +609,7 @@ async def customer_signup(request: Request, body: CustomerSignupRequest):
             f"VALUES ({PH}, {PH}, {PH}, 'Manual')", 
             (body.name, body.email, hashed))
         
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
             
         # Get the new ID
         execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (body.email,))
@@ -826,8 +742,7 @@ async def google_callback(request: Request):
                 execute_query(cursor, 
                     f"INSERT INTO Customers (Name, Email_ID) VALUES ({PH}, {PH})", 
                     (name, email))
-                if not IS_MYSQL:
-                    conn.commit()
+                # conn.commit()
                 execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
                 customer_user = fetch_one(cursor)
             
@@ -908,8 +823,7 @@ async def microsoft_callback(request: Request):
                 execute_query(cursor, 
                     f"INSERT INTO Customers (Name, Email_ID, Auth_Provider) VALUES ({PH}, {PH}, 'Microsoft')", 
                     (name, email))
-                if not IS_MYSQL:
-                    conn.commit()
+                # conn.commit()
                 execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
                 customer_user = fetch_one(cursor)
             
@@ -1057,8 +971,7 @@ async def resolve_ticket(request: Request, ticket_id: int):
             f"UPDATE Tickets SET Status = 'Resolved', "
             f"Resolved_At = CURRENT_TIMESTAMP WHERE Ticket_ID = {PH}",
             (ticket_id,))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Ticket resolved"}
     finally:
         conn.close()
@@ -1117,8 +1030,7 @@ async def create_transfer_request(request: Request, ticket_id: int, body: Transf
             f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) VALUES ({PH}, {PH}, {PH})",
             (ticket_id, "System", f"Transfer request submitted by {user.get('Name')} to move ticket to {to_agent.get('Name')}. Awaiting admin approval."))
 
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Transfer request submitted", "status": "Pending"}
     finally:
         conn.close()
@@ -1262,8 +1174,7 @@ async def add_agent(request: Request, body: AddAgentRequest):
                 f"VALUES ({PH}, {PH}, {PH})",
                 (body.name, body.email, body.role))
 
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": f"Added {body.name}."}
     except HTTPException:
         raise
@@ -1307,8 +1218,7 @@ async def assign_ticket(request: Request, ticket_id: int, body: AssignTicketRequ
         else:
             execute_query(cursor, f"UPDATE Tickets SET Agent_ID = NULL, Assigned_At = NULL, Due_Date = NULL WHERE Ticket_ID = {PH}", (ticket_id,))
         
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Ticket successfully reassigned"}
     finally:
         conn.close()
@@ -1329,8 +1239,7 @@ async def delete_agent(request: Request, agent_id: int):
         # Unassign tickets assigned to this agent before deleting
         execute_query(cursor, f"UPDATE Tickets SET Agent_ID = NULL WHERE Agent_ID = {PH}", (agent_id,))
         execute_query(cursor, f"DELETE FROM Support_Agents WHERE Agent_ID = {PH}", (agent_id,))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Agent removed successfully."}
     finally:
         conn.close()
@@ -1354,8 +1263,7 @@ async def handle_pw_request(request: Request, req_id: int, action: str):
             f"UPDATE Password_Change_Requests SET Status = {PH} "
             f"WHERE Request_ID = {PH}",
             (new_status, req_id))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": f"Request {new_status}"}
     finally:
         conn.close()
@@ -1452,8 +1360,7 @@ async def process_ticket_transfer_request(request: Request, request_id: int, bod
             f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) VALUES ({PH}, {PH}, {PH})",
             (transfer_req["Ticket_ID"], "System", msg))
 
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": f"Transfer request {new_status.lower()}"}
     finally:
         conn.close()
@@ -1474,23 +1381,16 @@ async def get_sql_metadata(request: Request):
     conn = get_db_conn()
     cursor = conn.cursor()
     try:
-        # Get all tables
-        if IS_MYSQL:
-            execute_query(cursor, "SHOW TABLES")
-            tables = [list(r.values())[0] for r in fetch_all(cursor)]
-        else:
-            execute_query(cursor, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            tables = [r["name"] for r in fetch_all(cursor)]
+        # Get all tables in the public schema
+        execute_query(cursor, "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'")
+        tables = [r["tablename"] for r in fetch_all(cursor)]
             
         metadata = {}
         for t in tables:
             # columns
-            if IS_MYSQL:
-                execute_query(cursor, f"DESCRIBE {t}")
-                cols = [c["Field"] for c in fetch_all(cursor)]
-            else:
-                execute_query(cursor, f"PRAGMA table_info({t})")
-                cols = [c["name"] for c in fetch_all(cursor)]
+            # columns
+            execute_query(cursor, f"SELECT column_name FROM information_schema.columns WHERE table_name = %s", (t,))
+            cols = [c["column_name"] for c in fetch_all(cursor)]
                 
             # sample rows
             execute_query(cursor, f"SELECT * FROM {t} LIMIT 5")
@@ -1550,8 +1450,7 @@ async def run_sql_query(request: Request, body: SqlQueryRequest):
                 "message": f"Success: {len(rows)} rows returned."
             }
         else:
-            if not IS_MYSQL:
-                conn.commit()
+            # conn.commit()
             return {
                 "columns": [],
                 "rows": [],
@@ -1620,8 +1519,7 @@ async def set_password(request: Request, body: SetPasswordRequest):
                 f"WHERE Agent_ID = {PH} AND Status = 'Approved'",
                 (user["Agent_ID"],))
 
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Password updated."}
     finally:
         conn.close()
@@ -1639,8 +1537,7 @@ async def request_password_change(request: Request):
             f"INSERT INTO Password_Change_Requests (Agent_ID, Status) "
             f"VALUES ({PH}, 'Pending')",
             (user["Agent_ID"],))
-        if not IS_MYSQL:
-            conn.commit()
+        # conn.commit()
         return {"message": "Request sent to admin."}
     finally:
         conn.close()
