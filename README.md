@@ -56,24 +56,35 @@
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
-```bash
-nexora-integrated/
-├── client/              # React 19 + Vite + Tailwind 4.0
-│   ├── src/
-│   │   ├── api/         # Centralized Axios layer with JWT handling
-│   │   ├── components/  # Reusable UI primitives (Shadcn/UI)
-│   │   ├── hooks/       # Custom React hooks for business logic
-│   │   └── pages/       # Dashboard, SQL Console, Admin Panel
-├── server/              # FastAPI + Pydantic v2 + SQLite/MySQL
-│   ├── main.py          # API Entry point & Background Tasks
-│   ├── db.py            # Database abstraction & Parameterized Queries
-│   ├── auth.py          # JWT Security & Auth Decorators
-│   └── .env.example     # Configuration template
-├── technicalDetails.md  # Deep technical documentation
-└── features.md          # Comprehensive feature inventory
+```mermaid
+graph TD
+    A[User / Customer] -->|HTTPS| B(React Frontend)
+    C[Support Agent] -->|JWT Auth| B
+    B -->|API Requests| D{FastAPI Gateway}
+    D -->|Triage Task| E[Background Worker]
+    D -->|Query/Update| F[(MySQL / SQLite)]
+    D -->|Contextual Query| G[OpenAI GPT-4o]
+    G -->|Response Suggestion| D
 ```
+
+---
+
+## 💾 Database Schema
+
+```mermaid
+erDiagram
+    CUSTOMERS ||--o{ TICKETS : raises
+    SUPPORT_AGENTS ||--o{ TICKETS : manages
+    TICKETS ||--o{ TICKET_CONVERSATIONS : contains
+    SUPPORT_AGENTS ||--o{ PASSWORD_CHANGE_REQUESTS : requests
+    TICKETS ||--o{ TICKET_TRANSFER_REQUESTS : initiates
+```
+
+---
+
+## 🏗️ Folder Structure
 
 > **Note:** Nexora uses an ORM-less database approach to maximize performance and ensure complete control over SQL execution.
 
