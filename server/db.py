@@ -1,6 +1,10 @@
 """
 Database helpers – Migrated to psycopg (v3) for Python 3.14 compatibility.
 All queries are parameterised to prevent SQL injection.
+
+IMPORTANT:
+This project uses PostgreSQL (psycopg3).
+NEVER use dict(row). ALWAYS use row._mapping via to_dict_row().
 """
 
 import os
@@ -45,21 +49,25 @@ def execute_query(cursor, query: str, params: tuple = ()):
     """Executes a query using the provided cursor and parameters."""
     cursor.execute(query, params)
 
+def to_dict_row(row):
+    """Safely converts a psycopg3 Row object to a dictionary using its ._mapping property."""
+    if row is None:
+        return None
+    if hasattr(row, "_mapping"):
+        return dict(row._mapping)
+    return dict(row) # Fallback if dict_row factory is already active
+
+
 def fetch_one(cursor) -> Optional[Dict[str, Any]]:
     """Fetches a single row and returns it as a dictionary."""
     row = cursor.fetchone()
-    if not row:
-        return None
-    # For psycopg3 default Row objects, use ._mapping. 
-    # If using dict_row, it's already a dict.
-    if hasattr(row, "_mapping"):
-        return dict(row._mapping)
-    return dict(row)
+    return to_dict_row(row)
+
 
 def fetch_all(cursor) -> List[Dict[str, Any]]:
     """Fetches all rows and returns them as a list of dictionaries."""
     rows = cursor.fetchall()
-    return [dict(r._mapping) if hasattr(r, "_mapping") else dict(r) for r in rows]
+    return [to_dict_row(r) for r in rows]
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
