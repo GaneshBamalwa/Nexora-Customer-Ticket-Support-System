@@ -146,7 +146,3 @@ npm run dev
 
 ---
 
-<div align="center">
-  <p>Built with 💙 for the future of customer support.</p>
-  <a href="#top">Back to top</a>
-</div>
