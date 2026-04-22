@@ -47,16 +47,19 @@ def execute_query(cursor, query: str, params: tuple = ()):
 
 def fetch_one(cursor) -> Optional[Dict[str, Any]]:
     """Fetches a single row and returns it as a dictionary."""
-    # If the cursor uses dict_row, it returns a dict already
     row = cursor.fetchone()
     if not row:
         return None
+    # For psycopg3 default Row objects, use ._mapping. 
+    # If using dict_row, it's already a dict.
+    if hasattr(row, "_mapping"):
+        return dict(row._mapping)
     return dict(row)
 
 def fetch_all(cursor) -> List[Dict[str, Any]]:
     """Fetches all rows and returns them as a list of dictionaries."""
     rows = cursor.fetchall()
-    return [dict(r) for r in rows]
+    return [dict(r._mapping) if hasattr(r, "_mapping") else dict(r) for r in rows]
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 

@@ -194,13 +194,13 @@ async def startup_event():
 # ──────────────────
 # Using a flexible approach that supports both local dev and production Railway urls.
 # If CORS_ORIGIN is not provided, it defaults to "*" for convenience in testing.
-cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGIN", "*").split(",")]
+cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGIN", "https://nexora-support.vercel.app, http://localhost:3002, http://localhost:3003").split(",")]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True, # Enabled to allow Authlib session cookies for CSRF/State
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
