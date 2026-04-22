@@ -14,7 +14,6 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blueviolet.svg?style=flat-square)](#)
 [![Stars](https://img.shields.io/github/stars/GaneshBamalwa/customer_portal_integrated?style=flat-square&color=cyan)](https://github.com/GaneshBamalwa/customer_portal_integrated/stargazers)
 
-<img src="https://images.unsplash.com/photo-1531746790731-6c087fecd65a?auto=format&fit=crop&q=80&w=1200&h=400" alt="Nexora Hero Banner" width="100%" style="border-radius: 10px; margin: 20px 0;">
 
 </div>
 
