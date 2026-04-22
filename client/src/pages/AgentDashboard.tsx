@@ -7,7 +7,7 @@ import {
   AlertCircle, CheckCircle, Search, ChevronRight, LayoutDashboard,
   Filter, Star, KeyRound, Database
 } from "lucide-react";
-import { getDashboard, resolveTicket, assignTicket, logout, isAuthenticated, getCurrentUser, requestPasswordChange } from "@/api";
+import { getDashboard, resolveTicket, requestTicketTransfer, logout, isAuthenticated, getCurrentUser, requestPasswordChange } from "@/api";
 import { toast } from "sonner";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -361,7 +361,7 @@ export default function AgentDashboard() {
                                   </button>
                                </Link>
 
-                               {(!isAdmin && ticket.Status !== "Resolved") && (
+                               {(!isAdmin && ticket.Status !== "Resolved" && String(ticket.Agent_ID) === String(currentAgentId)) && (
                                  <>
                                    <div className="relative group/pass">
                                       <button className="px-3 py-1.5 bg-secondary/10 border border-secondary/30 text-secondary text-[10px] font-black hover:bg-secondary/20 transition-all">
@@ -376,8 +376,8 @@ export default function AgentDashboard() {
                                                 <button
                                                   key={agent.Agent_ID}
                                                   onClick={() => {
-                                                    assignTicket(ticket.Ticket_ID, agent.Agent_ID)
-                                                      .then(() => { toast.success(`Transferred to ${agent.Name}`); fetchDashboard(); })
+                                                    requestTicketTransfer(ticket.Ticket_ID, agent.Agent_ID)
+                                                      .then(() => { toast.success(`Transfer request sent to admin for ${agent.Name}`); fetchDashboard(); })
                                                       .catch(e => toast.error(e.message));
                                                   }}
                                                   className="w-full text-left px-3 py-2 text-[10px] font-bold hover:bg-primary/20 hover:text-primary rounded transition-colors"

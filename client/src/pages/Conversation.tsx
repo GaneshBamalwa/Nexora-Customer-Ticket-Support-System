@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { ArrowLeft, Send, MessageSquare, User, Cpu, CheckCircle } from "lucide-react";
 import { ImmersiveBackground } from "@/components/ImmersiveBackground";
-import { getConversation, postConversation, aiSuggest, resolveTicket } from "@/api";
+import { getConversation, postConversation, aiSuggest, resolveTicket, getDashboard, requestTicketTransfer } from "@/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDemoMission } from "@/hooks/useDemoMission";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Conversation() {
   const { authenticated, user } = useAuth();
@@ -19,6 +20,13 @@ export default function Conversation() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [transferTarget, setTransferTarget] = useState<string>("");
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferRequest, setTransferRequest] = useState<any>(null);
+
+  const role = String(user?.Role || user?.role || "");
+  const canRequestTransfer = authenticated && role === "Agent";
 
   useEffect(() => {
     fetchConversation();
@@ -35,12 +43,26 @@ export default function Conversation() {
       const data = await getConversation(ticketId, email);
       setTicket(data.ticket);
       setMessages(data.messages || []);
+      setTransferRequest(data.transfer_request || null);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!canRequestTransfer) return;
+    getDashboard()
+      .then((data: any) => {
+        const currentAgentId = String(user?.Agent_ID || user?.agent_id || "");
+        const available = (data.agents || []).filter((a: any) => String(a.Agent_ID) !== currentAgentId);
+        setAgents(available);
+      })
+      .catch(() => {
+        setAgents([]);
+      });
+  }, [canRequestTransfer, user?.Agent_ID, user?.agent_id]);
 
   const handleSend = async () => {
     if (!newMessage.trim()) return;
@@ -76,6 +98,26 @@ export default function Conversation() {
       fetchConversation();
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  const handleTransferRequest = async () => {
+    const toAgentId = parseInt(transferTarget, 10);
+    if (!Number.isFinite(toAgentId)) {
+      toast.error("Select a target agent first.");
+      return;
+    }
+
+    setTransferLoading(true);
+    try {
+      await requestTicketTransfer(ticketId, toAgentId);
+      toast.success("Transfer request submitted for admin approval.");
+      setTransferTarget("");
+      fetchConversation(true);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit transfer request.");
+    } finally {
+      setTransferLoading(false);
     }
   };
 
@@ -141,6 +183,12 @@ export default function Conversation() {
               <div>
                 <h2 className="text-xl font-bold">{ticket.Subject}</h2>
                 <p className="text-sm text-muted-foreground mt-1">{ticket.Description}</p>
+                {transferRequest && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Transfer Request: <span className="font-bold text-foreground">{transferRequest.Status}</span>
+                    {transferRequest.To_Agent_Name ? ` -> ${transferRequest.To_Agent_Name}` : ""}
+                  </p>
+                )}
               </div>
               <div className="flex gap-3">
                 <span className={`status-badge ${ticket.Status === "Open" ? "status-open" : ticket.Status === "Resolved" ? "status-resolved" : "status-pending"}`}>
@@ -218,7 +266,32 @@ export default function Conversation() {
               </div>
             </div>
           ) : (
-            <div className="flex gap-3 materialize">
+            <div className="space-y-3 materialize">
+              {canRequestTransfer && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-[220px]">
+                    <Select value={transferTarget} onValueChange={setTransferTarget}>
+                      <SelectTrigger className="bg-white/5 border-white/10 h-10 text-xs font-semibold">
+                        <SelectValue placeholder="Select agent for transfer request" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#020818] border-white/10">
+                        {agents.map((a: any) => (
+                          <SelectItem key={a.Agent_ID} value={String(a.Agent_ID)}>{a.Name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <button
+                    onClick={handleTransferRequest}
+                    disabled={transferLoading || !transferTarget}
+                    className="px-4 h-10 rounded-xl bg-secondary/15 border border-secondary/30 text-secondary text-xs font-black uppercase tracking-wide disabled:opacity-50 hover:bg-secondary/25 transition-all"
+                  >
+                    {transferLoading ? "Submitting..." : "Request Transfer"}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-3">
               <textarea
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
@@ -246,6 +319,7 @@ export default function Conversation() {
                 )}
                 <span className="hidden sm:inline">SEND</span>
               </button>
+              </div>
             </div>
           )}
         </div>

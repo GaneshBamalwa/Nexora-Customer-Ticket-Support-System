@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 
 const MISSION_KEY = (email: string, sessionId?: string) => `nexora_mission_${email}${sessionId ? '_' + sessionId : ''}`;
+const AUTO_REPLY_KEY = (ticketId: number, sessionId?: string) =>
+  `nexora_demo_auto_reply_${sessionId || 'global'}_${ticketId}`;
 
 export type DemoChecklist = {
   ticket_opened: boolean;
@@ -129,16 +131,25 @@ export const useDemoMission = () => {
         
         // Only trigger Elon's response once
         if (!checklist.ticket_replied) {
+            const ticketId = parseInt(event.path.split('/')[2], 10);
+            if (!Number.isFinite(ticketId)) return;
+
+            const autoReplyKey = AUTO_REPLY_KEY(ticketId, sessionId);
+            if (sessionStorage.getItem(autoReplyKey) === '1') return;
+            sessionStorage.setItem(autoReplyKey, '1');
+
             setTimeout(async () => {
               try {
-                const ticketId = event.path.split('/')[2];
                 await postConversation(
-                  parseInt(ticketId), 
-                  "That's very helpful! I see the update now. Everything is back online. Should I close this ticket or will you?", 
+                  ticketId,
+                  "That's very helpful! I see the update now. Everything is back online. You may resolve the ticket and continue with the missions.", 
                   "elon@starlink.io"
                 );
                 toast("📬 New Message from Elon Musk", { description: "Review and resolve the ticket.", icon: "💬" });
-              } catch (e) {}
+              } catch (e) {
+                // Release lock on failure so the auto-response can retry on next send.
+                sessionStorage.removeItem(autoReplyKey);
+              }
             }, 4000);
         }
       }
@@ -151,7 +162,7 @@ export const useDemoMission = () => {
     });
 
     return () => unsubscribe();
-  }, [isDemo, checklist.ticket_replied]);
+  }, [isDemo, checklist.ticket_replied, sessionId]);
 
   const totalSteps = Object.keys(checklist).length;
   const completedSteps = Object.values(checklist).filter(Boolean).length;

@@ -56,7 +56,7 @@ Nexora is ORM-less — uses raw SQL with parameterized queries for maximum perfo
 - MYSQLHOST, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE, MYSQLPORT
 - If MYSQLHOST is absent, system falls back to SQLite automatically
 
-### Schema — 5 Core Tables
+### Schema — 6 Core Tables
 
 #### Customers
 | Column      | Type         | Notes              |
@@ -109,6 +109,18 @@ Nexora is ORM-less — uses raw SQL with parameterized queries for maximum perfo
 | Status       | VARCHAR   | 'Pending' or 'Approved'     |
 | Requested_At | TIMESTAMP |                             |
 
+#### Ticket_Transfer_Requests
+| Column        | Type      | Notes                                      |
+|---------------|-----------|--------------------------------------------|
+| Request_ID    | INT (PK)  | Auto-increment                             |
+| Ticket_ID     | INT (FK)  | -> Tickets                                 |
+| From_Agent_ID | INT (FK)  | Requesting agent                           |
+| To_Agent_ID   | INT (FK)  | Target agent                               |
+| Status        | VARCHAR   | 'Pending', 'Approved', or 'Rejected'       |
+| Requested_At  | TIMESTAMP |                                             |
+| Processed_At  | TIMESTAMP | Nullable                                    |
+| Processed_By  | INT (FK)  | -> Support_Agents (admin reviewer), nullable|
+
 ---
 
 ## 4. API Endpoints
@@ -130,12 +142,15 @@ Nexora is ORM-less — uses raw SQL with parameterized queries for maximum perfo
 ### Agent (JWT Required)
 - GET  /api/dashboard                     — Tickets scoped to agent (or all for admin)
 - POST /api/tickets/{id}/resolve          — Mark a ticket as Resolved
+- POST /api/tickets/{id}/transfer-request — Request transfer to another agent (admin approval required)
 
 ### Admin (Administrator Role Required)
 - GET    /api/admin/report                — Full analytics: stats, agent performance, priority breakdown
 - POST   /api/admin/agents                — Add new agent (with optional temp password)
 - DELETE /api/admin/agents/{id}           — Remove an agent
 - POST   /api/admin/tickets/{id}/assign   — Assign/reassign a ticket
+- GET    /api/admin/approvals             — Unified pending approvals (password + ticket transfer)
+- POST   /api/admin/approvals/ticket-transfer/{request_id}/process — Approve/reject transfer request
 
 ### AI
 - POST /api/ai/query    — Query the Nexora AI chatbot (used on About page)

@@ -71,6 +71,21 @@ const tables = [
       { name: "Requested_At", type: "timestamp", key: "" },
     ],
   },
+  {
+    id: "Ticket_Transfer_Requests",
+    name: "TICKET_TRANSFER_REQUESTS",
+    x: 700, y: 860, width: 330,
+    columns: [
+      { name: "Request_ID",     type: "int",       key: "PK" },
+      { name: "Ticket_ID",      type: "int",       key: "FK" },
+      { name: "From_Agent_ID",  type: "int",       key: "FK" },
+      { name: "To_Agent_ID",    type: "int",       key: "FK" },
+      { name: "Status",         type: "varchar",   key: "" },
+      { name: "Requested_At",   type: "timestamp", key: "" },
+      { name: "Processed_At",   type: "timestamp", key: "" },
+      { name: "Processed_By",   type: "int",       key: "FK" },
+    ],
+  },
 ];
 
 const connections = [
@@ -78,6 +93,8 @@ const connections = [
   { from: "Support_Agents", fromPort: "left",   to: "Tickets",                  toPort: "right", label: "assigned to" },
   { from: "Support_Agents", fromPort: "bottom", to: "Password_Change_Requests", toPort: "top",   label: "requests" },
   { from: "Tickets",        fromPort: "bottom", to: "Ticket_Conversations",      toPort: "top",   label: "has" },
+  { from: "Tickets",        fromPort: "right",  to: "Ticket_Transfer_Requests",  toPort: "left",  label: "transfer req" },
+  { from: "Support_Agents", fromPort: "right",  to: "Ticket_Transfer_Requests",  toPort: "top",   label: "from/to" },
 ];
 
 function tableHeight(t: typeof tables[0]) { return HEADER_H + t.columns.length * ROW_H; }

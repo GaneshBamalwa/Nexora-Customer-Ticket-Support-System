@@ -22,22 +22,20 @@ export const FeatureDiscoveryPanel = () => {
     return "🎊 Mission Complete! You are a Nexora Demo Master.";
   }
 
-  const tasksPhase1 = [
-    { key: "ticket_opened", label: "Ticket opened" },
-    { key: "ticket_replied", label: "Ticket replied" },
-    { key: "ticket_resolved", label: "Ticket resolved" },
+  const allTasks = [
+    { key: "ticket_opened", label: "Ticket opened", phase: "Step 1: Interact" },
+    { key: "ticket_replied", label: "Ticket replied", phase: "Step 1: Interact" },
+    { key: "ticket_resolved", label: "Ticket resolved", phase: "Step 1: Interact" },
+    { key: "dashboard_visited", label: "Dashboard overview", phase: "Step 2: Explore" },
+    { key: "assign_visited", label: "Assign tickets", phase: "Step 2: Explore" },
+    { key: "analytics_visited", label: "View operation intel", phase: "Step 2: Explore" },
+    { key: "admin_visited", label: "View team management", phase: "Step 2: Explore" },
+    { key: "sql_visited", label: "View sql console", phase: "Step 2: Explore" },
   ];
 
-  const tasksPhase2 = [
-    { key: "dashboard_visited", label: "Dashboard overview" },
-    { key: "assign_visited", label: "Assign tickets" },
-    { key: "analytics_visited", label: "View operation intel" },
-    { key: "admin_visited", label: "View team management" },
-    { key: "sql_visited", label: "View sql console" },
-  ];
-
-  const totalTasks = tasksPhase1.length + tasksPhase2.length;
+  const totalTasks = allTasks.length;
   const completedCount = Object.values(checklist).filter(Boolean).length;
+  const currentTask = allTasks.find(task => !(checklist as any)[task.key]);
 
   const renderTask = (task: { key: string; label: string }) => {
     const done = (checklist as any)[task.key];
@@ -46,7 +44,7 @@ export const FeatureDiscoveryPanel = () => {
         <div className={`transition-colors duration-300 ${done ? 'text-green-500' : 'text-muted-foreground group-hover:text-primary'}`}>
           {done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
         </div>
-        <span className={`text-[11px] transition-all duration-300 ${done ? 'text-muted-foreground line-through opacity-50 font-normal' : 'font-bold'}`}>
+        <span className={`text-[11px] transition-all duration-300 ${done ? 'text-muted-foreground line-through opacity-50 font-normal' : 'font-bold underline underline-offset-4 decoration-primary/30'}`}>
           {task.label}
         </span>
       </div>
@@ -89,15 +87,36 @@ export const FeatureDiscoveryPanel = () => {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                 <h4 className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-2">Step 1: Interact</h4>
-                 <div className="space-y-2">{tasksPhase1.map(renderTask)}</div>
-              </div>
-              <div>
-                 <h4 className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-2">Step 2: Explore</h4>
-                 <div className="space-y-2">{tasksPhase2.map(renderTask)}</div>
-              </div>
+            <div className="min-h-[60px]">
+              <AnimatePresence mode="wait">
+                {currentTask ? (
+                  <motion.div 
+                    key={currentTask.key}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-3"
+                  >
+                     <h4 className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                       {currentTask.phase}
+                     </h4>
+                     {renderTask(currentTask)}
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center justify-center py-4 text-center bg-green-500/5 rounded-lg border border-green-500/10"
+                  >
+                    <Trophy className="w-8 h-8 text-green-500 mb-2" />
+                    <span className="text-[12px] font-black text-green-500 uppercase tracking-widest">
+                      Mission Complete
+                    </span>
+                    <p className="text-[10px] text-muted-foreground mt-1">You've explored everything!</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
@@ -113,6 +132,7 @@ export const FeatureDiscoveryPanel = () => {
                 Reset
               </button>
             </div>
+
             
             <AnimatePresence>
               {isCompleted && (

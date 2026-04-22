@@ -237,6 +237,13 @@ export async function resolveTicket(ticketId: number) {
   return request(`/tickets/${ticketId}/resolve`, { method: "POST" });
 }
 
+export async function requestTicketTransfer(ticketId: number, toAgentId: number) {
+  return request(`/tickets/${ticketId}/transfer-request`, {
+    method: "POST",
+    body: JSON.stringify({ to_agent_id: toAgentId }),
+  });
+}
+
 // ─── ADMIN ──────────────────────────────────────────────────────────────────
 
 export async function getAdminReport() {
@@ -268,6 +275,17 @@ export async function assignTicket(ticketId: number, agentId: number | null) {
 
 export async function handlePwRequest(reqId: number, action: "approve" | "deny") {
   return request(`/admin/pw-requests/${reqId}/${action}`, { method: "POST" });
+}
+
+export async function getAdminApprovals() {
+  return request("/admin/approvals");
+}
+
+export async function processTransferApproval(requestId: number, action: "approve" | "reject") {
+  return request(`/admin/approvals/ticket-transfer/${requestId}/process`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
 }
 
 // ─── PASSWORD ───────────────────────────────────────────────────────────────

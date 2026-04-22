@@ -360,6 +360,14 @@ class AssignTicketRequest(BaseModel):
     agent_id: Optional[int] = None
 
 
+class TransferRequestBody(BaseModel):
+    to_agent_id: int
+
+
+class ProcessTransferRequestBody(BaseModel):
+    action: str = Field(..., pattern=r"^(approve|reject)$")
+
+
 # ─── STARTUP ─────────────────────────────────────────────────────────────────
 
 
@@ -482,7 +490,21 @@ async def get_conversation(request: Request, ticket_id: int, email: Optional[str
             f"SELECT * FROM Ticket_Conversations WHERE Ticket_ID = {PH} "
             f"ORDER BY Timestamp ASC", (ticket_id,))
         messages = [process_row(r) for r in fetch_all(cursor)]
-        return {"ticket": process_row(ticket), "messages": messages}
+
+        execute_query(cursor,
+            f"SELECT tr.*, fa.Name as From_Agent_Name, ta.Name as To_Agent_Name "
+            f"FROM Ticket_Transfer_Requests tr "
+            f"LEFT JOIN Support_Agents fa ON tr.From_Agent_ID = fa.Agent_ID "
+            f"LEFT JOIN Support_Agents ta ON tr.To_Agent_ID = ta.Agent_ID "
+            f"WHERE tr.Ticket_ID = {PH} ORDER BY tr.Requested_At DESC LIMIT 1",
+            (ticket_id,))
+        transfer_req = fetch_one(cursor)
+
+        return {
+            "ticket": process_row(ticket),
+            "messages": messages,
+            "transfer_request": process_row(transfer_req) if transfer_req else None,
+        }
     finally:
         conn.close()
 
@@ -945,8 +967,11 @@ async def dashboard(request: Request,
         )
         params = []
 
-        # IDOR: agents only see their tickets + unassigned
-        if user["Role"] != "Administrator":
+        role = str(user.get("Role") or "")
+
+        # IDOR: agents only see their tickets + unassigned.
+        # DemoAgent mirrors admin visibility inside isolated demo session.
+        if role not in ("Administrator", "DemoAgent"):
             query += " AND (Agent_ID = %s OR Agent_ID IS NULL)"
             params.append(user["Agent_ID"])
 
@@ -974,16 +999,16 @@ async def dashboard(request: Request,
             "SUM(CASE WHEN Status='Open' THEN 1 ELSE 0 END) as open_count, "
             "SUM(CASE WHEN Status='Resolved' THEN 1 ELSE 0 END) as resolved "
             "FROM Tickets WHERE 1=1"
-            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["Role"] != "Administrator" else ""),
-            (user["Agent_ID"],) if user["Role"] != "Administrator" else ()
+            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if role not in ("Administrator", "DemoAgent") else ""),
+            (user["Agent_ID"],) if role not in ("Administrator", "DemoAgent") else ()
         )
         stats = fetch_one(cursor) or {}
 
         execute_query(cursor,
             "SELECT Created_Date, Resolved_At FROM Tickets WHERE Status='Resolved' "
             "AND Resolved_At IS NOT NULL AND Created_Date IS NOT NULL"
-            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if user["Role"] != "Administrator" else ""),
-            (user["Agent_ID"],) if user["Role"] != "Administrator" else ()
+            + (" AND (Agent_ID = %s OR Agent_ID IS NULL)" if role not in ("Administrator", "DemoAgent") else ""),
+            (user["Agent_ID"],) if role not in ("Administrator", "DemoAgent") else ()
         )
         resolved_tickets = [process_row(r) for r in fetch_all(cursor)]
         total_hours, valid_tkts = 0, 0
@@ -1035,6 +1060,66 @@ async def resolve_ticket(request: Request, ticket_id: int):
         if not IS_MYSQL:
             conn.commit()
         return {"message": "Ticket resolved"}
+    finally:
+        conn.close()
+
+
+@app.post("/api/tickets/{ticket_id}/transfer-request")
+@limiter.limit(RATE_LIMIT_API)
+async def create_transfer_request(request: Request, ticket_id: int, body: TransferRequestBody):
+    """Agent requests a ticket transfer; admin must approve the request."""
+    user = get_current_user(request)
+    role = str(user.get("Role") or "")
+    if role not in ("Agent", "Administrator", "DemoAgent"):
+        raise HTTPException(403, "Only agents can request transfers")
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        execute_query(cursor,
+            f"SELECT Ticket_ID, Agent_ID, Status FROM Tickets WHERE Ticket_ID = {PH}",
+            (ticket_id,))
+        ticket = fetch_one(cursor)
+        if not ticket:
+            raise HTTPException(404, "Ticket not found")
+
+        requester_agent_id = user.get("Agent_ID") or user.get("agent_id") or user.get("ID")
+        if str(ticket.get("Agent_ID")) != str(requester_agent_id):
+            raise HTTPException(403, "Only the assigned agent can request transfer")
+
+        if str(ticket.get("Status")) == "Resolved":
+            raise HTTPException(400, "Cannot transfer a resolved ticket")
+
+        execute_query(cursor,
+            f"SELECT Agent_ID, Role, Name FROM Support_Agents WHERE Agent_ID = {PH}",
+            (body.to_agent_id,))
+        to_agent = fetch_one(cursor)
+        if not to_agent or str(to_agent.get("Role")) != "Agent":
+            raise HTTPException(400, "Target agent is invalid")
+
+        if str(body.to_agent_id) == str(user.get("Agent_ID")):
+            raise HTTPException(400, "Target agent must be different from requester")
+
+        # Prevent stacking duplicate pending requests for the same ticket.
+        execute_query(cursor,
+            f"SELECT Request_ID FROM Ticket_Transfer_Requests WHERE Ticket_ID = {PH} AND Status = 'Pending'",
+            (ticket_id,))
+        if fetch_one(cursor):
+            raise HTTPException(400, "A transfer request is already pending for this ticket")
+
+        execute_query(cursor,
+            f"INSERT INTO Ticket_Transfer_Requests (Ticket_ID, From_Agent_ID, To_Agent_ID, Status) "
+            f"VALUES ({PH}, {PH}, {PH}, 'Pending')",
+            (ticket_id, requester_agent_id, body.to_agent_id))
+
+        # Lightweight notification trail in conversation history.
+        execute_query(cursor,
+            f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) VALUES ({PH}, {PH}, {PH})",
+            (ticket_id, "System", f"Transfer request submitted by {user.get('Name')} to move ticket to {to_agent.get('Name')}. Awaiting admin approval."))
+
+        if not IS_MYSQL:
+            conn.commit()
+        return {"message": "Transfer request submitted", "status": "Pending"}
     finally:
         conn.close()
 
@@ -1202,10 +1287,13 @@ async def assign_ticket(request: Request, ticket_id: int, body: AssignTicketRequ
         if not ticket:
             raise HTTPException(404, "Ticket not found")
 
-        # Security check: Admin OR currently assigned agent
-        is_admin = user["Role"] == "Administrator"
-        is_owner = ticket["Agent_ID"] == user["Agent_ID"]
-        if not (is_admin or is_owner):
+        # Security check:
+        # - Production: only Administrator can assign/reassign.
+        # - Demo sandbox: DemoAgent can reassign within isolated session DB.
+        role = str(user.get("Role") or "").lower()
+        is_admin = role == "administrator"
+        is_demo_agent = role == "demoagent" and bool(user.get("is_demo")) and bool(user.get("session_id"))
+        if not (is_admin or is_demo_agent):
             raise HTTPException(403, "Not authorized to reassign this ticket")
 
         if body.agent_id:
@@ -1273,6 +1361,104 @@ async def handle_pw_request(request: Request, req_id: int, action: str):
         conn.close()
 
 
+@app.get("/api/admin/approvals")
+@limiter.limit(RATE_LIMIT_API)
+async def admin_approvals(request: Request):
+    """Unified approvals endpoint for password and ticket transfer requests."""
+    user = get_current_user(request)
+    require_admin(user)
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        execute_query(cursor,
+            "SELECT r.Request_ID, r.Agent_ID, r.Status, r.Requested_At, a.Name, a.Email_ID "
+            "FROM Password_Change_Requests r "
+            "JOIN Support_Agents a ON r.Agent_ID = a.Agent_ID "
+            "WHERE r.Status = 'Pending' ORDER BY r.Requested_At DESC")
+        pw_requests = [process_row(r) for r in fetch_all(cursor)]
+
+        execute_query(cursor,
+            "SELECT tr.Request_ID, tr.Ticket_ID, tr.From_Agent_ID, tr.To_Agent_ID, tr.Status, tr.Requested_At, "
+            "fa.Name as From_Agent_Name, fa.Email_ID as From_Agent_Email, "
+            "ta.Name as To_Agent_Name, ta.Email_ID as To_Agent_Email "
+            "FROM Ticket_Transfer_Requests tr "
+            "JOIN Support_Agents fa ON tr.From_Agent_ID = fa.Agent_ID "
+            "JOIN Support_Agents ta ON tr.To_Agent_ID = ta.Agent_ID "
+            "WHERE tr.Status = 'Pending' ORDER BY tr.Requested_At DESC")
+        transfer_requests = [process_row(r) for r in fetch_all(cursor)]
+
+        return {
+            "password_requests": pw_requests,
+            "ticket_transfer_requests": transfer_requests,
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/admin/approvals/ticket-transfer/{request_id}/process")
+@limiter.limit(RATE_LIMIT_API)
+async def process_ticket_transfer_request(request: Request, request_id: int, body: ProcessTransferRequestBody):
+    """Approve or reject a pending ticket transfer request."""
+    user = get_current_user(request)
+    require_admin(user)
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        execute_query(cursor,
+            f"SELECT * FROM Ticket_Transfer_Requests WHERE Request_ID = {PH}",
+            (request_id,))
+        transfer_req = fetch_one(cursor)
+        if not transfer_req:
+            raise HTTPException(404, "Transfer request not found")
+        if transfer_req.get("Status") != "Pending":
+            raise HTTPException(400, "Transfer request already processed")
+
+        execute_query(cursor,
+            f"SELECT Ticket_ID, Agent_ID, Status FROM Tickets WHERE Ticket_ID = {PH}",
+            (transfer_req["Ticket_ID"],))
+        ticket = fetch_one(cursor)
+        if not ticket:
+            raise HTTPException(404, "Ticket not found")
+        if ticket.get("Status") == "Resolved":
+            raise HTTPException(400, "Cannot process transfer for resolved ticket")
+
+        action = body.action.lower()
+        new_status = "Approved" if action == "approve" else "Rejected"
+
+        if action == "approve":
+            execute_query(cursor,
+                f"UPDATE Tickets SET Agent_ID = {PH}, Assigned_At = CURRENT_TIMESTAMP WHERE Ticket_ID = {PH}",
+                (transfer_req["To_Agent_ID"], transfer_req["Ticket_ID"]))
+
+        execute_query(cursor,
+            f"UPDATE Ticket_Transfer_Requests SET Status = {PH}, Processed_At = CURRENT_TIMESTAMP, Processed_By = {PH} "
+            f"WHERE Request_ID = {PH}",
+            (new_status, user.get("Agent_ID"), request_id))
+
+        # Notify both agents via ticket timeline audit message.
+        if action == "approve":
+            msg = (
+                f"Transfer approved by admin {user.get('Name')}. "
+                f"Ticket moved from Agent #{transfer_req['From_Agent_ID']} to Agent #{transfer_req['To_Agent_ID']}."
+            )
+        else:
+            msg = (
+                f"Transfer request rejected by admin {user.get('Name')}. "
+                f"Ticket remains with Agent #{transfer_req['From_Agent_ID']}."
+            )
+        execute_query(cursor,
+            f"INSERT INTO Ticket_Conversations (Ticket_ID, Sender_Role, Message_Text) VALUES ({PH}, {PH}, {PH})",
+            (transfer_req["Ticket_ID"], "System", msg))
+
+        if not IS_MYSQL:
+            conn.commit()
+        return {"message": f"Transfer request {new_status.lower()}"}
+    finally:
+        conn.close()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SQL QUERY CONSOLE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1293,7 +1479,7 @@ async def get_sql_metadata(request: Request):
             execute_query(cursor, "SHOW TABLES")
             tables = [list(r.values())[0] for r in fetch_all(cursor)]
         else:
-            execute_query(cursor, "SELECT name FROM sqlite_master WHERE type='table'")
+            execute_query(cursor, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
             tables = [r["name"] for r in fetch_all(cursor)]
             
         metadata = {}
@@ -1314,7 +1500,11 @@ async def get_sql_metadata(request: Request):
                 processed = process_row(r)
                 rows.append(processed)
                 
-            metadata[t] = {
+            # Normalize table name for frontend ER diagram mapping
+            # (Remove internal 'Demo_' prefix if present)
+            display_name = t[5:] if t.startswith("Demo_") else t
+            
+            metadata[display_name] = {
                 "columns": cols,
                 "rows": rows
             }
@@ -1496,18 +1686,20 @@ async def ai_suggest(request: Request):
 async def ai_query(request: Request, body: SqlQueryRequest): 
     """Public / Authenticated: Ask AI about the Nexora project via OpenRouter."""
     query = body.query.strip()
+    logging.info(f"AI Query received: {query[:50]}...")
     
-    # Reload env to pick up new keys
+    # Reload env to pick up new keys if they were changed
     from dotenv import load_dotenv
     load_dotenv(override=True)
     
     openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
     
     if not openrouter_api_key:
-        logging.error("OPENROUTER_API_KEY NOT FOUND")
-        raise HTTPException(500, "OpenRouter API key not configured")
+        logging.error("CRITICAL: OPENROUTER_API_KEY NOT FOUND in environment or .env file")
+        raise HTTPException(status_code=500, detail="OpenRouter API key not configured on the server.")
 
     try:
+        # We use the OpenAI client pointed to OpenRouter
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=openrouter_api_key.strip(),
@@ -1544,21 +1736,38 @@ async def ai_query(request: Request, body: SqlQueryRequest):
         - If the question is outside scope, say: "I'm sorry, but I can only answer questions related to the Nexora project and support operations."
         """
 
+        logging.info("Calling OpenRouter API...")
         chat_completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "http://localhost:3003",
-                "X-Title": "Nexora About AI",
+                "HTTP-Referer": "http://localhost:3002", # Corrected port to match vite default
+                "X-Title": "Nexora Intelligence Center",
             },
             model="google/gemini-2.0-flash-001",
             messages=[
                 {"role": "system", "content": f"You are an expert on the Nexora project. {project_details}"},
                 {"role": "user", "content": query}
-            ]
+            ],
+            timeout=30.0 # Add timeout to prevent hanging
         )
-        return {"answer": chat_completion.choices[0].message.content}
+        
+        if not chat_completion.choices:
+            logging.error("OpenRouter returned empty choices")
+            raise Exception("AI returned no response.")
+
+        answer = chat_completion.choices[0].message.content
+        logging.info("AI response generated successfully.")
+        return {"answer": answer}
+
     except Exception as e:
-        logging.error(f"OpenRouter API error: {str(e)}")
-        raise HTTPException(500, f"AI Service Error: {str(e)}")
+        error_msg = str(e)
+        logging.error(f"OpenRouter API error: {error_msg}")
+        # Return a more descriptive error if it's an API error
+        if "401" in error_msg:
+            raise HTTPException(status_code=500, detail="Invalid OpenRouter API Key. Please check your .env file.")
+        elif "404" in error_msg:
+            raise HTTPException(status_code=500, detail="AI Model not found on OpenRouter. Please verify the model name.")
+        else:
+            raise HTTPException(status_code=500, detail=f"AI Service Error: {error_msg}")
 
 
 # ─── ENTRYPOINT ──────────────────────────────────────────────────────────────

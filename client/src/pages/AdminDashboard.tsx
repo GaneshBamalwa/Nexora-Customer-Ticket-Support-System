@@ -13,7 +13,7 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
 import {
-  getAdminReport, addAgent, deleteAgent, assignTicket, handlePwRequest,
+  getAdminReport, addAgent, deleteAgent, assignTicket, handlePwRequest, getAdminApprovals, processTransferApproval,
   getDashboard, logout, isAuthenticated, getCurrentUser, resolveTicket
 } from "@/api";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const [priorityData, setPriorityData] = useState<any[]>([]);
   const [dailyData, setDailyData] = useState<any[]>([]);
   const [pwRequests, setPwRequests] = useState<any[]>([]);
+  const [transferRequests, setTransferRequests] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [agentsList, setAgentsList] = useState<any[]>([]);
 
@@ -65,17 +66,23 @@ export default function AdminDashboard() {
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [report, dashboard] = await Promise.all([
+      const [report, dashboard, approvalsData] = await Promise.all([
         getAdminReport(),
         getDashboard(),
+        getAdminApprovals(),
       ]);
-      setReportStats(report.stats || {});
-      setPerformance(report.performance || []);
-      setPriorityData(report.priority_data || []);
-      setDailyData(report.daily_data || []);
-      setPwRequests(report.pw_requests || []);
-      setTickets(dashboard.tickets || []);
-      setAgentsList(dashboard.agents || []);
+      const adminReport = report as any;
+      const dashboardData = dashboard as any;
+      const approvals = approvalsData as any;
+
+      setReportStats(adminReport.stats || {});
+      setPerformance(adminReport.performance || []);
+      setPriorityData(adminReport.priority_data || []);
+      setDailyData(adminReport.daily_data || []);
+      setPwRequests(approvals.password_requests || adminReport.pw_requests || []);
+      setTransferRequests(approvals.ticket_transfer_requests || []);
+      setTickets(dashboardData.tickets || []);
+      setAgentsList(dashboardData.agents || []);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -110,7 +117,6 @@ export default function AdminDashboard() {
   };
 
   const handleAssign = async (ticketId: number, agentId: number | null) => {
-    if (isDemo) return toast.info("Read-only mode active during demo.");
     try {
       await assignTicket(ticketId, agentId);
       toast.success("Ticket assigned!");
@@ -128,6 +134,17 @@ export default function AdminDashboard() {
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  const handleTransferApproval = async (requestId: number, action: "approve" | "reject") => {
+    if (isDemo) return toast.info("Read-only mode active during demo.");
+    try {
+      await processTransferApproval(requestId, action);
+      toast.success(`Transfer request ${action === "approve" ? "approved" : "rejected"}.`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to process transfer request.");
     }
   };
 
@@ -747,11 +764,14 @@ export default function AdminDashboard() {
             {/* 5. APPROVALS */}
             <TabsContent value="approvals" className="materialize outline-none space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Password Change Approvals</h2>
-                <p className="text-sm text-muted-foreground">Review and action agent password change requests.</p>
+                <h2 className="text-2xl font-bold text-foreground">Approvals</h2>
+                <p className="text-sm text-muted-foreground">Review password and ticket transfer approval queues.</p>
               </div>
 
               <div className="glass-card-enhanced overflow-hidden border-border/10">
+                <div className="px-6 py-4 border-b border-border/20 bg-card/40">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">Password Change Requests</h3>
+                </div>
                 {pwRequests.length === 0 ? (
                   <div className="p-20 text-center text-xs italic text-muted-foreground">No pending approval requests.</div>
                 ) : (
@@ -802,6 +822,63 @@ export default function AdminDashboard() {
                                   </button>
                                 </div>
                               )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="glass-card-enhanced overflow-hidden border-border/10">
+                <div className="px-6 py-4 border-b border-border/20 bg-card/40">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-foreground">Ticket Transfer Requests</h3>
+                </div>
+                {transferRequests.length === 0 ? (
+                  <div className="p-20 text-center text-xs italic text-muted-foreground">No pending transfer requests.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border/20 bg-card/60">
+                          <th className="px-6 py-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Ticket</th>
+                          <th className="px-6 py-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest">From Agent</th>
+                          <th className="px-6 py-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest">To Agent</th>
+                          <th className="px-6 py-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Requested</th>
+                          <th className="px-6 py-4 text-left text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Status</th>
+                          <th className="px-6 py-4 text-right text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/10">
+                        {transferRequests.map((req: any) => (
+                          <tr key={req.Request_ID} className="hover:bg-primary/5 transition-all">
+                            <td className="px-6 py-4 text-sm font-bold">#{req.Ticket_ID}</td>
+                            <td className="px-6 py-4 text-xs text-muted-foreground">{req.From_Agent_Name || `Agent #${req.From_Agent_ID}`}</td>
+                            <td className="px-6 py-4 text-xs text-muted-foreground">{req.To_Agent_Name || `Agent #${req.To_Agent_ID}`}</td>
+                            <td className="px-6 py-4 text-xs text-muted-foreground">
+                              {req.Requested_At ? new Date(req.Requested_At).toLocaleString() : "—"}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-sm border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                                {(req.Status || "Pending").toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleTransferApproval(req.Request_ID, "approve")}
+                                  className="px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-black hover:bg-green-500/20 transition-all"
+                                >
+                                  APPROVE
+                                </button>
+                                <button
+                                  onClick={() => handleTransferApproval(req.Request_ID, "reject")}
+                                  className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-black hover:bg-red-500/20 transition-all"
+                                >
+                                  REJECT
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}

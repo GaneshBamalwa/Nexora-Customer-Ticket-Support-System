@@ -71,21 +71,15 @@ def execute_query(cursor, query: str, params: tuple = ()):
     # If session_id is active, we are ALREADY in a different file.
     
     if is_demo and not session_id:
-        # Legacy shared demo tables in the main DB
-        tables = [
-            "Customers", "Support_Agents", "Tickets", 
-            "Ticket_Conversations", "Password_Change_Requests"
-        ]
-        for table in tables:
-            pattern = rf'\b{table}\b'
-            query = re.sub(pattern, f"Demo_{table}", query, flags=re.IGNORECASE)
+        # Hard safety guard: demo writes/reads must be bound to a session-isolated DB file.
+        raise RuntimeError("Demo mode requires a valid session_id for isolated database access.")
     
     # If session_id is set, the isolated file ALREADY has "Demo_" tables because of how init_db works.
     # So we still need the regex if we want to use the same queries.
     if session_id:
         tables = [
             "Customers", "Support_Agents", "Tickets", 
-            "Ticket_Conversations", "Password_Change_Requests"
+            "Ticket_Conversations", "Password_Change_Requests", "Ticket_Transfer_Requests"
         ]
         for table in tables:
             pattern = rf'\b{table}\b'
@@ -156,6 +150,17 @@ def _init_tables(cursor, prefix=""):
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {p}Tickets (Ticket_ID INT AUTO_INCREMENT PRIMARY KEY, Customer_ID INT, Agent_ID INT NULL, Subject VARCHAR(255), Description TEXT, Status VARCHAR(50) DEFAULT 'Open', Priority VARCHAR(50), FollowUpCount INT DEFAULT 0, Rating INT NULL, Created_Date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, Assigned_At DATETIME NULL, Resolved_At DATETIME NULL, Due_Date DATETIME NULL)")
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {p}Ticket_Conversations (Message_ID INT AUTO_INCREMENT PRIMARY KEY, Ticket_ID INT, Sender_Role VARCHAR(50), Message_Text TEXT, Timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {p}Password_Change_Requests (Request_ID INT AUTO_INCREMENT PRIMARY KEY, Agent_ID INT, Status VARCHAR(50) DEFAULT 'Pending', Requested_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        cursor.execute(
+            f"CREATE TABLE IF NOT EXISTS {p}Ticket_Transfer_Requests ("
+            "Request_ID INT AUTO_INCREMENT PRIMARY KEY, "
+            "Ticket_ID INT NOT NULL, "
+            "From_Agent_ID INT NOT NULL, "
+            "To_Agent_ID INT NOT NULL, "
+            "Status VARCHAR(50) DEFAULT 'Pending', "
+            "Requested_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+            "Processed_At DATETIME NULL, "
+            "Processed_By INT NULL)"
+        )
     else:
         cursor.executescript(f"""
             CREATE TABLE IF NOT EXISTS {p}Customers (Customer_ID INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT, Email_ID TEXT UNIQUE);
@@ -163,6 +168,7 @@ def _init_tables(cursor, prefix=""):
             CREATE TABLE IF NOT EXISTS {p}Tickets (Ticket_ID INTEGER PRIMARY KEY AUTOINCREMENT, Customer_ID INTEGER, Agent_ID INTEGER NULL, Subject TEXT, Description TEXT, Status TEXT DEFAULT 'Open', Priority TEXT, FollowUpCount INTEGER DEFAULT 0, Rating INTEGER NULL, Created_Date DATETIME DEFAULT CURRENT_TIMESTAMP, Assigned_At DATETIME NULL, Resolved_At DATETIME NULL, Due_Date DATETIME NULL);
             CREATE TABLE IF NOT EXISTS {p}Ticket_Conversations (Message_ID INTEGER PRIMARY KEY AUTOINCREMENT, Ticket_ID INTEGER, Sender_Role TEXT, Message_Text TEXT, Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS {p}Password_Change_Requests (Request_ID INTEGER PRIMARY KEY AUTOINCREMENT, Agent_ID INTEGER, Status TEXT DEFAULT 'Pending', Requested_At DATETIME DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE IF NOT EXISTS {p}Ticket_Transfer_Requests (Request_ID INTEGER PRIMARY KEY AUTOINCREMENT, Ticket_ID INTEGER NOT NULL, From_Agent_ID INTEGER NOT NULL, To_Agent_ID INTEGER NOT NULL, Status TEXT DEFAULT 'Pending', Requested_At DATETIME DEFAULT CURRENT_TIMESTAMP, Processed_At DATETIME NULL, Processed_By INTEGER NULL);
         """)
 
 def init_db():
@@ -361,6 +367,24 @@ def seed_demo_data(cursor):
                 f"Created_Date, Assigned_At) VALUES ({PH},{PH},{PH},{PH},{PH},{PH},{PH},{PH})",
                 (cust_id, agent_id, subject, description, priority, status, created_at, assigned_at)
             )
+
+    # ── 3b. Unassigned Assignment Queue (for demo reassignment flow) ─────────
+    unassigned_tickets = [
+        (0, "Launch Pad Sensor Drift", "Telemetry from launch pad pressure sensors is intermittently dropping packets.", "High", "Open", 0),
+        (1, "Inference API 502 Spikes", "Public inference endpoint is returning bursts of 502 errors under medium load.", "High", "Open", 1),
+        (2, "Settlement Ledger Delay", "Nightly settlement ledger is delayed by 3 hours for APAC merchants.", "Medium", "Open", 1),
+        (3, "Exam Proctoring Audio Mute", "Invigilator audio channel goes silent mid-session for some classrooms.", "Medium", "Pending", 2),
+        (2, "Webhook Retry Storm", "Duplicate webhook retries are flooding the queue after timeout recovery.", "Low", "Open", 0),
+    ]
+
+    for (ci, subject, description, priority, status, days_ago) in unassigned_tickets:
+        cust_id = cust_ids[ci]
+        created_at = ago(days=days_ago)
+        cursor.execute(
+            f"INSERT INTO Demo_Tickets (Customer_ID, Agent_ID, Subject, Description, Priority, Status, Created_Date, Assigned_At) "
+            f"VALUES ({PH},{PH},{PH},{PH},{PH},{PH},{PH},{PH})",
+            (cust_id, None, subject, description, priority, status, created_at, None)
+        )
 
     # ── 4. Conversations ────────────────────────────────────────────────────────
     cursor.execute("SELECT Ticket_ID FROM Demo_Tickets LIMIT 6")

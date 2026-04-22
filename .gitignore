@@ -1,15 +1,52 @@
-# Server
-server/venv/
-server/__pycache__/
-server/*.db
-server/.env
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Client
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
 client/node_modules/
-client/dist/
+server/venv/
 
-# IDE
+# Build outputs
+dist/
+client/dist/
+build/
+.next/
+out/
+client/.vite/
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+client/.env
+
+# Databases
+*.db
+server/*.db
+server/support_portal.db
+
+# Python
+__pycache__/
+server/__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs
 .vscode/
 .idea/
-*.pyc
-client/.vite/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/

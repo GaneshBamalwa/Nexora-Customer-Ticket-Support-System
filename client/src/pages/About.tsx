@@ -85,8 +85,13 @@ export default function About() {
     try {
       const response = await aiQuery(userMessage);
       setChatMessages(prev => [...prev, { role: "ai", text: response.answer }]);
-    } catch (error) {
-      setChatMessages(prev => [...prev, { role: "ai", text: "Sorry, I'm having trouble connecting to my knowledge base right now." }]);
+    } catch (error: any) {
+      console.error("AI Chat Error:", error);
+      const errorMsg = error.message || "Unknown connectivity error.";
+      setChatMessages(prev => [...prev, { 
+        role: "ai", 
+        text: `**System Notice:** ${errorMsg}\n\nI'm having trouble connecting to my knowledge base right now. Please ensure the backend is running and the API keys are configured.` 
+      }]);
     } finally {
       setIsTyping(false);
     }
