@@ -52,11 +52,11 @@ if __name__ == "__main__" and not __package__:
     sys.path.append(str(path.parent.parent))
     __package__ = path.parent.name
 
-from .db import (
+from db import (
     get_db_conn, execute_query, fetch_one, fetch_all,
     process_row, init_db, IS_MYSQL, PH, _verify_pw
 )
-from .auth import (
+from auth import (
     create_token, get_current_user, require_admin,
     require_owner_or_admin, verify_ms_token,
 )
@@ -248,8 +248,8 @@ async def demo_context_middleware(request: Request, call_next):
     Inspect every JWT and set is_demo_context/session_id_context for demo sessions.
     This transparently routes ALL queries to isolated session DBs if available.
     """
-    from .db import is_demo_context, session_id_context
-    from .auth import JWT_SECRET, JWT_ALGORITHM
+    from db import is_demo_context, session_id_context
+    from auth import JWT_SECRET, JWT_ALGORITHM
     import jwt as pyjwt
 
     is_demo = False
@@ -608,7 +608,7 @@ async def demo_initialize(request: Request):
     4. Return restricted JWT
     """
     import uuid
-    from .db import init_session_db, is_demo_context, session_id_context
+    from db import init_session_db, is_demo_context, session_id_context
     
     session_id = str(uuid.uuid4())[:12]
     
@@ -641,7 +641,7 @@ async def demo_initialize(request: Request):
                 "exp": datetime.utcnow() + timedelta(hours=8)
             }
             import jwt as pyjwt
-            from .auth import JWT_SECRET, JWT_ALGORITHM
+            from auth import JWT_SECRET, JWT_ALGORITHM
             jwt_token = pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
             
             return {
