@@ -61,6 +61,10 @@ from auth import (
     require_owner_or_admin, verify_ms_token,
 )
 
+# ─── ENVIRONMENT CONFIG ─────────────────────────────────────────────────────
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3002").rstrip("/")
+BACKEND_URL  = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
+
 # ─── APP INIT ────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -146,7 +150,7 @@ async def background_auto_assign():
 @app.get("/api/auth/logout")
 async def logout_route(request: Request):
     """Clear session/cookies and redirect to login."""
-    response = RedirectResponse(url="http://localhost:3002/")
+    response = RedirectResponse(url=f"{FRONTEND_URL}/")
     # If we used HTTP-only cookies, we would clear them here:
     # response.delete_cookie("token")
     
@@ -698,7 +702,7 @@ async def login(request: Request, body: LoginRequest):
 @app.get("/api/auth/google")
 async def login_google(request: Request):
     """Initiate Google OAuth2 flow."""
-    redirect_uri = os.environ.get("GOOGLE_CALLBACK_URL")
+    redirect_uri = os.environ.get("GOOGLE_CALLBACK_URL") or f"{BACKEND_URL}/api/auth/google/callback"
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
@@ -721,7 +725,7 @@ async def google_callback(request: Request):
         
         if not email:
             logging.error("GOOGLE AUTH ERROR: No email returned")
-            return RedirectResponse("http://localhost:3002/login?error=google_no_email")
+            return RedirectResponse(f"{FRONTEND_URL}/login?error=google_no_email")
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -732,7 +736,7 @@ async def google_callback(request: Request):
             
             if staff_user:
                 # Staff are NOT allowed to use Google per instructions
-                return RedirectResponse("http://localhost:3002/?error=staff_must_use_manual")
+                return RedirectResponse(f"{FRONTEND_URL}/?error=staff_must_use_manual")
 
             # 2. Check/Create Customer
             execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
@@ -758,22 +762,20 @@ async def google_callback(request: Request):
             
             logging.info(f"LOGIN SUCCESSFUL FOR CUSTOMER {customer_user['Customer_ID']}")
             # Redirect directly to customer portal
-            return RedirectResponse(url=f"http://localhost:3002/portal?token={jwt_token}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/portal?token={jwt_token}")
             
         finally:
             conn.close()
             
     except Exception as e:
         logging.error(f"GOOGLE AUTH FAILURE: {str(e)}", exc_info=True)
-        return RedirectResponse("http://localhost:3002/login?error=google_auth_failed")
+        return RedirectResponse(f"{FRONTEND_URL}/login?error=google_auth_failed")
 
 
 @app.get("/api/auth/microsoft")
 async def login_microsoft(request: Request):
     """Initiate Microsoft OAuth2 flow."""
-    redirect_uri = os.environ.get("MICROSOFT_REDIRECT_URI")
-    if not redirect_uri:
-        raise HTTPException(500, "MICROSOFT_REDIRECT_URI not configured")
+    redirect_uri = os.environ.get("MICROSOFT_REDIRECT_URI") or f"{BACKEND_URL}/api/auth/microsoft/callback"
     return await oauth.microsoft.authorize_redirect(request, redirect_uri)
 
 
@@ -802,7 +804,7 @@ async def microsoft_callback(request: Request):
         
         if not email:
             logging.error("OAUTH ERROR: No email returned in user_info")
-            return RedirectResponse("http://localhost:3002/?error=ms_no_email")
+            return RedirectResponse(f"{FRONTEND_URL}/?error=ms_no_email")
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -812,7 +814,7 @@ async def microsoft_callback(request: Request):
             staff_user = fetch_one(cursor)
             
             if staff_user:
-                return RedirectResponse("http://localhost:3002/?error=staff_must_use_manual")
+                return RedirectResponse(f"{FRONTEND_URL}/?error=staff_must_use_manual")
 
             # 2. Check/Create Customer
             execute_query(cursor, f"SELECT * FROM Customers WHERE Email_ID = {PH}", (email,))
@@ -837,14 +839,14 @@ async def microsoft_callback(request: Request):
             jwt_token = create_token(customer_payload)
             
             # Redirect directly to customer portal
-            return RedirectResponse(url=f"http://localhost:3002/portal?token={jwt_token}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/portal?token={jwt_token}")
             
         finally:
             conn.close()
             
     except Exception as e:
         logging.error(f"MICROSOFT CALLBACK FAILURE: {str(e)}", exc_info=True)
-        return RedirectResponse("http://localhost:3002/login?error=ms_auth_failed")
+        return RedirectResponse(f"{FRONTEND_URL}/login?error=ms_auth_failed")
 
 
 
@@ -1563,7 +1565,7 @@ async def ai_suggest(request: Request):
         
         chat_completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "http://localhost:3003",
+                "HTTP-Referer": FRONTEND_URL,
                 "X-Title": "Nexora Support",
             },
             model="google/gemini-2.0-flash-001",
@@ -1636,7 +1638,7 @@ async def ai_query(request: Request, body: SqlQueryRequest):
         logging.info("Calling OpenRouter API...")
         chat_completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "http://localhost:3002", # Corrected port to match vite default
+                "HTTP-Referer": FRONTEND_URL, # Dynamically set from environment
                 "X-Title": "Nexora Intelligence Center",
             },
             model="google/gemini-2.0-flash-001",

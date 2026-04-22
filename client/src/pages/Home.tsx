@@ -286,7 +286,7 @@ export default function Home() {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                   <a
-                    href={`${import.meta.env.VITE_API_URL || ""}/api/auth/google?redirect=http://localhost:3002/`}
+                    href={`${import.meta.env.VITE_API_URL || ""}/api/auth/google?redirect=${import.meta.env.VITE_APP_URL || "http://localhost:3002"}/`}
                     className="glass-card-enhanced p-5 flex flex-col items-center justify-center gap-3 hover:scale-110 transition-all border border-white/5 hover:border-primary/30 group"
                   >
                     <img src="https://www.google.com/favicon.ico" alt="Google" className="w-6 h-6 grayscale group-hover:grayscale-0 transition-all" />
@@ -294,7 +294,7 @@ export default function Home() {
                   </a>
                   
                   <a
-                    href={`${import.meta.env.VITE_API_URL || ""}/api/auth/microsoft?redirect=http://localhost:3002/`}
+                    href={`${import.meta.env.VITE_API_URL || ""}/api/auth/microsoft?redirect=${import.meta.env.VITE_APP_URL || "http://localhost:3002"}/`}
                     className="glass-card-enhanced p-5 flex flex-col items-center justify-center gap-3 hover:scale-110 transition-all border border-white/5 hover:border-blue-400/30 group"
                   >
                     <img src="https://www.microsoft.com/favicon.ico" alt="Microsoft" className="w-6 h-6 grayscale group-hover:grayscale-0 transition-all" />
