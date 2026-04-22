@@ -174,7 +174,7 @@ async def startup_event():
         cursor.execute("SELECT 1")
         cursor.close()
         conn.close()
-        logging.info("PostgreSQL connection established successfully.")
+        logging.info("PostgreSQL connection successful")
     except Exception as e:
         logging.error(f"PostgreSQL connection/initialization failed: {e}")
         # We don't exit here to allow the app to attempt recovery or show error states

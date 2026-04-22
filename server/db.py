@@ -1,5 +1,5 @@
 """
-Database helpers – Migrated to PostgreSQL for production deployment.
+Database helpers – Migrated to psycopg (v3) for Python 3.14 compatibility.
 All queries are parameterised to prevent SQL injection.
 """
 
@@ -9,8 +9,8 @@ import re
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
+from psycopg.rows import dict_row
 import bcrypt
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -28,8 +28,9 @@ def get_db_conn():
     
     try:
         # Connect with SSL required as per Aiven defaults
-        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-        # Enable autocommit to match previous behavior (no explicit commit() needed)
+        # psycopg (v3) uses 'sslmode' instead of 'sslmode' in the connection string or as a keyword arg
+        conn = psycopg.connect(DATABASE_URL, sslmode="require")
+        # Enable autocommit to match previous behavior
         conn.autocommit = True
         return conn
     except Exception as e:
@@ -42,11 +43,11 @@ def get_connection():
 
 def execute_query(cursor, query: str, params: tuple = ()):
     """Executes a query using the provided cursor and parameters."""
-    # PostgreSQL uses %s for parameterization.
     cursor.execute(query, params)
 
 def fetch_one(cursor) -> Optional[Dict[str, Any]]:
     """Fetches a single row and returns it as a dictionary."""
+    # If the cursor uses dict_row, it returns a dict already
     row = cursor.fetchone()
     if not row:
         return None
@@ -172,7 +173,8 @@ def _init_tables(cursor, prefix=""):
 def init_db():
     """Initializes the PostgreSQL database schema and seeds default data."""
     conn = get_db_conn()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    # Use dict_row to ensure rows are returned as dictionaries
+    cursor = conn.cursor(row_factory=dict_row)
     
     try:
         # 1. Create Production Tables
@@ -197,9 +199,6 @@ def init_db():
         if os.environ.get("DEMO_MODE") == "true":
             _init_tables(cursor, prefix="Demo_")
             logging.info("PostgreSQL Demo_ tables checked/created.")
-            # Seed demo data if needed (idempotent seed should be called here)
-            # seed_demo_data(cursor) # Not implemented in this version to keep it clean, 
-            # but we can add it if needed. For now, we focus on schema migration.
         
         logging.info("Database initialization complete.")
         
