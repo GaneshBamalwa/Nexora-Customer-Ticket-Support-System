@@ -102,28 +102,6 @@ erDiagram
 
 ---
 
-## 📸 Screenshots
-
-<div align="center">
-  <table style="width: 100%">
-    <tr>
-      <td width="50%"><strong>Immersive Landing Page</strong></td>
-      <td width="50%"><strong>Agent Command Center</strong></td>
-    </tr>
-    <tr>
-      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Nexora+Hero+UI" alt="Landing Page"></td>
-      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Agent+Dashboard" alt="Agent Dashboard"></td>
-    </tr>
-    <tr>
-      <td width="50%"><strong>AI Support Chat</strong></td>
-      <td width="50%"><strong>Admin Analytics</strong></td>
-    </tr>
-    <tr>
-      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=AI+Chatbot+UI" alt="AI Chatbot"></td>
-      <td><img src="https://via.placeholder.com/600x350/0a0a0a/00ffff?text=Admin+Report+UI" alt="Admin Report"></td>
-    </tr>
-  </table>
-</div>
 
 ---
 
